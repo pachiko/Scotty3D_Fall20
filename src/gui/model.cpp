@@ -1,7 +1,6 @@
 
 #include <algorithm>
 #include <imgui/imgui.h>
-#include <iostream>
 #include "manager.h"
 #include "model.h"
 #include "widgets.h"
@@ -166,7 +165,6 @@ void Model::apply_transform(Widgets &widgets) {
                            } else if (beveling == Bevel::edge) {
                                my_mesh->bevel_edge_positions(trans_begin.verts, face, delta.pos.x);
                            } else {
-                               std::cout << trans_begin.verts[0] <<std::endl;
                                my_mesh->bevel_face_positions(trans_begin.verts, face, delta.pos.x,
                                                              delta.pos.y);
                            }

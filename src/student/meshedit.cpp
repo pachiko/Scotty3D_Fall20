@@ -2,7 +2,6 @@
 #include <queue>
 #include <set>
 #include <unordered_map>
-#include <iostream>
 #include "../geometry/halfedge.h"
 #include "debug.h"
 
@@ -172,35 +171,6 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     VertexRef v0 = h3->next()->vertex(); // h4->vertex = v0
     EdgeRef e2 = h3->next()->edge(); // h4->edge() = e2
     HalfedgeRef h8 = h3->next()->twin(); // h4->twin() = h8
-
-    /*
-    // check if either vertex of e0 forms a face with the other flip vertices
-    // not good
-        // check if either vertex of e0 forms a face with the other flip vertices
-    for (unsigned int i = 0; i < h6->face()->degree() - 1; i++)
-        h6 = h6->next();
-
-    if (h6->vertex() == h3->next()->next()->vertex()) {
-        (void) e0;
-        return std::nullopt;
-    }
-     h6 = h6->next();
-
-    for (unsigned int i = 0; i < h8->face()->degree() - 1; i++)
-        h8 = h8->next();
-
-    if (h8->vertex() == h0->next()->next()->vertex()) {
-        (void) e0;
-        return std::nullopt;
-    }
-     h8 = h8->next();
-     
-    if (h6->next()->next()->vertex() == h3->next()->next()->vertex() ||
-    h8->next()->next()->vertex() == h0->next()->next()->vertex()) {
-        (void) e0;
-        return std::nullopt;
-    }
-    */
 
     // get flip vertices, always the 2nd regardless of face's degree (n-gon)
     h0->vertex() = h3->next()->next()->vertex(); // v2
@@ -453,27 +423,17 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::F
         VertexRef nv1 = isLast? first_vertex : new_vertex(); // new second vertex
 
         // New halfedges
-        HalfedgeRef nh0 = new_halfedge();
-        HalfedgeRef nh1 = new_halfedge();
-        HalfedgeRef nh2 = new_halfedge();
-        HalfedgeRef nh3 = new_halfedge();
+        HalfedgeRef nh0 = new_halfedge(); HalfedgeRef nh1 = new_halfedge();
+        HalfedgeRef nh2 = new_halfedge(); HalfedgeRef nh3 = new_halfedge();
         
         // Edge 2
-        nh0->twin() = h; // swap twins
-        h->twin() = nh0;
-
-        h->vertex() = nv0; // new vertex
-        nv0->halfedge() = h;
-
-        nh0->vertex() = nv1; // new vertex. nv1's halfedge set later
-        nh0->next() = nh1; // next halfedge
-        nh0->edge() = e2; // new edge
-        h->edge() = e2;
-        e2->halfedge() = h;
-
-        nh0->face() = nf; // new face
-        nf->halfedge() = nh0; 
-        
+        nh0->set_neighbors(nh1, h, nv1, e2, nf);
+        h->twin() = nh0; // swap twins
+        h->vertex() = nv0; nv0->halfedge() = h; // new vertex
+        nv0->pos = ov0->pos; // init new pos with old pos
+        h->edge() = e2; e2->halfedge() = h;
+        nf->halfedge() = nh0; // new face
+         
         // Edge 1
         e1->halfedge() = nh1;
         nh1->edge() = e1;
@@ -486,13 +446,9 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::F
         }
 
         // Edge 0
-        nh2->vertex() = ov0;
+        nh2->set_neighbors(nh3, t, ov0, e0, nf);
         ov0->halfedge() = nh2;
-        nh2->edge() = e0;
-        nh2->twin() = t;
         t->twin() = nh2;
-        nh2->face() = nf;
-        nh2->next() = nh3;
 
         // Edge 3
         nh3->edge() = e3;
@@ -618,9 +574,7 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3> &start_position
     } while (h != face->halfedge());
  
     int N = (int)new_halfedges.size();
-    //Vec3 n = cross(start_positions[1] - start_positions[0], start_positions[2] - start_positions[0]).unit();
     Vec3 n = face->normal();
-    //std::cout << start_positions << std::endl; // NaN????
     for(int i = 0; i < N; i++) {
         // Assuming we're looking at vertex i, compute the indices
         // of the next and previous elements in the list using
@@ -636,12 +590,13 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3> &start_position
         Vec3 pa = start_positions[a];
         Vec3 pb = start_positions[b];
         Vec3 pc = start_positions[c];
-        // std::cout << pb << std::endl; all zeros???
-        // Cross product as quarter rotation
-        Vec3 ca = pa - pc;
-        Vec3 t = cross(n, ca);
+        
+        // mid-point as inset/offset point
+        Vec3 m = (pc + pa)/2.f;
+        Vec3 t = (pb - m).unit();
        
-        new_halfedges[i]->vertex()->pos = pb + t*tangent_offset + n*normal_offset;
+        // Shrink or Expand. Elevate or Depress
+        new_halfedges[i]->vertex()->pos = pb + t*tangent_offset - n*normal_offset;
     }
 }
 
