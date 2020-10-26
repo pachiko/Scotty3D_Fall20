@@ -324,7 +324,7 @@ static void load_node(Scene &scobj, std::vector<std::string> &errors,
         std::vector<std::vector<Halfedge_Mesh::Index>> polys;
         for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
             const aiFace &face = mesh->mFaces[j];
-
+            if(face.mNumIndices < 3) continue;
             std::vector<Halfedge_Mesh::Index> poly;
             for (unsigned int k = 0; k < face.mNumIndices; k++) {
                 poly.push_back(face.mIndices[k]);
@@ -404,12 +404,16 @@ static void load_node(Scene &scobj, std::vector<std::string> &errors,
 
                 for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
                     const aiVector3D &vpos = mesh->mVertices[j];
-                    const aiVector3D &vnorm = mesh->mNormals[j];
+                    aiVector3D vnorm;
+                    if(mesh->HasNormals()) {
+                        vnorm = mesh->mNormals[j];
+                    }
                     mesh_verts.push_back({aiVec(vpos), aiVec(vnorm), 0});
                 }
 
                 for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
                     const aiFace &face = mesh->mFaces[j];
+                    if(face.mNumIndices < 3) continue;
                     unsigned int start = face.mIndices[0];
                     for (size_t k = 1; k <= face.mNumIndices - 2; k++) {
                         mesh_inds.push_back(start);
@@ -876,7 +880,6 @@ std::string Scene::write(std::string file, const Camera &render_cam,
                 size_t n_faces = mesh.n_faces();
 
                 ai_mesh->mVertices = new aiVector3D[n_verts];
-                ai_mesh->mNormals = new aiVector3D[n_verts];
                 ai_mesh->mNumVertices = (unsigned int)n_verts;
 
                 ai_mesh->mFaces = new aiFace[n_faces];
@@ -887,9 +890,7 @@ std::string Scene::write(std::string file, const Camera &render_cam,
                 size_t vert_idx = 0;
                 for (auto v = mesh.vertices_begin(); v != mesh.vertices_end(); v++) {
                     id_to_idx[v->id()] = vert_idx;
-                    Vec3 n = mesh.flipped() ? -v->normal() : v->normal();
                     ai_mesh->mVertices[vert_idx] = vecVec(v->pos);
-                    ai_mesh->mNormals[vert_idx] = vecVec(n);
                     vert_idx++;
                 }
 
@@ -911,7 +912,7 @@ std::string Scene::write(std::string file, const Camera &render_cam,
                     face_idx++;
                 }
 
-            } else {
+            } else if(obj.opt.shape_type == PT::Shape_Type::none) {
 
                 const auto &verts = obj.mesh().verts();
                 const auto &elems = obj.mesh().indices();

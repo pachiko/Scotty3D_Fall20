@@ -20,7 +20,9 @@ This tutorial from [Scratchapixel](https://www.scratchapixel.com/lessons/3d-basi
 
 **Step 2:** Implement `Camera::generate_ray`. This function should return a ray **in world space** that reaches the given sensor sample point. We recommend that you compute this ray in camera space (where the camera pinhole is at the origin, the camera is looking down the -Z axis, and +Y is at the top of the screen.). In `util/camera.h`, the `Camera` class stores `vert_fov` and `aspect_ratio` indicating the vertical field of view of the camera (in degrees, not radians) as well as the aspect ratio. Note that the camera maintains camera-space-to-world space transform matirx `iview` that will come fairly handy. 
 
-**Step 3:** Your implementation of `Pathtracer::trace_pixel` must support supersampling (more than one sample per pixel). The member `Pathtracer::ns_aa` in the raytracer class gives the number of samples of scene radiance your ray tracer should take per pixel (a.k.a. the number of camera rays per pixel. You should implement `Rect::Uniform::sample` (see `src/student/samplers.cpp`), such that it provides uniformly distributed random 2D points in the [0-1]^2 box. Supersampling should be implemented by calling get_sample() to obtain randomly chosen points within the pixel.
+**Step 3:** Your implementation of `Pathtracer::trace_pixel` must support super-sampling. The member `Pathtracer::n_samples` specifies the number of samples of scene radiance to evaluate per pixel. The starter code will hence call `Pathtracer::trace_pixel` one time for each sample, so your implementation of `Pathtracer::trace_pixel` should choose a new location within the pixel each time.
+
+To choose a sample within the pixel, you should implement `Rect::Uniform::sample` (see `src/student/samplers.cpp`), such that it provides (random) uniformly distributed 2D points within the rectangular region specified by the origin and the member `Rect::Uniform::size`. Then you may then create a `Rect::Uniform` sampler with a one-by-one region and call `sample()` to obtain randomly chosen offsets within the pixel.
 
 Once you have implemented `Pathtracer::trace_pixel`, `Rect::Uniform::sample` and `Camera::generate_ray`, you should have a working camera.
 
@@ -29,6 +31,10 @@ Once you have implemented `Pathtracer::trace_pixel`, `Rect::Uniform::sample` and
 *   Since it'll be hard to know if you camera rays are correct until you implement primitive intersection, we recommend debugging your camera rays by checking what your implementation of `Camera::generate_ray` does with rays at the center of the screen (0.5, 0.5) and at the corners of the image.
 *   The code can log the results of raytracing for visualization and debugging. To do so, simply call function `Pathtracer::log_ray` in your `Pathtracer::trace_pixel`. Function `Pathtracer::log_ray` takes in 3 arguments: the ray thay you want to log, a float that specifies the time/distance to log that ray up to, as well as the color. You don't need to worry about the color as it is being set to white by default.
 After running the ray tracer, rays will be shown as lines in visualizer. Press v to switch to the visualizer, and use s to toggle showing rays. A yellow ray indicates that it intersected some primitive (which you will implement soon). Be sure to wait for rendering to complete so you see all rays while visualizing, a message is printed to standard output on completion. 
+
+You can visualize the result of the generated rays by checking the box for Logged rays under Visualize.
+
+![logged_rays](new_results/log_rays.png)
 
 **Extra credit ideas:**
 
