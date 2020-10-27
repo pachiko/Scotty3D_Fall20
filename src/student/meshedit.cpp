@@ -44,9 +44,48 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh:
     merged face.
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::EdgeRef e) {
+    if (e->on_boundary()) {
+        (void)e;
+        return std::nullopt;
+    }
 
-    (void)e;
-    return std::nullopt;
+    // Keep track of face 0 and the two halfedges along e
+    FaceRef f0 = e->halfedge()->face();
+    HalfedgeRef h0 =  e->halfedge();
+    HalfedgeRef h1 = h0->twin();
+
+    // v1 points to h0->next; v0 points to h1->next
+    h0->vertex()->halfedge() = h1->next();
+    h1->vertex()->halfedge() = h0->next();
+
+    // f0 points to h0->next
+    f0->halfedge() = h0->next();
+
+    // to get h1->prev and assign it's next to h0->next
+    HalfedgeRef h = h1->next();
+    while (true) {
+         // Also assign face 0 for face 1's halfedges while we're at it :)
+        h->face() = f0;
+        if (h->next() == h1) {
+            h->next() = h0->next();
+            break;
+        }
+        h = h->next();
+    }
+    
+    //  to get h0->prev and assign it's next to h1->next
+    h = h0->next();
+    while (true) {
+        if (h->next() == h0) {
+            h->next() = h1->next();
+            break;
+        }
+        h = h->next();
+    }
+
+    // Deallocate edge, face 1, and h0 & h1
+    erase(e); erase(h1->face()); erase(h0); erase(h1);
+    return f0;
 }
 
 /*
@@ -572,9 +611,10 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3> &start_position
         new_halfedges.push_back(h);
         h = h->next();
     } while (h != face->halfedge());
- 
+    
     int N = (int)new_halfedges.size();
     Vec3 n = face->normal();
+
     for(int i = 0; i < N; i++) {
         // Assuming we're looking at vertex i, compute the indices
         // of the next and previous elements in the list using

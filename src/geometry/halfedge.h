@@ -221,13 +221,12 @@ public:
         deg: Degree of the face
         v: vertex to be kept after collapsing edge. Needs to set its halfedge()
     */
-    void Halfedge_Mesh::modify_face(Halfedge_Mesh::HalfedgeRef h, unsigned int deg,
-    std::optional<Halfedge_Mesh::VertexRef> v=std::nullopt);
+    void modify_face(HalfedgeRef h, unsigned int deg, std::optional<VertexRef> v=std::nullopt);
 
     /*
         This method should removes the halfedges, face and one edge.
     */
-    void Halfedge_Mesh::remove_triangle(Halfedge_Mesh::HalfedgeRef h);
+    void remove_triangle(HalfedgeRef h);
     
     /*
         Collapse a face, returning a pointer to the collapsed vertex
@@ -258,8 +257,7 @@ public:
         h: existing halfedge on the splitting edge (h0, h3)
         v4: Newly created vertex when splitting edge.
     */
-    std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::divide_face(Halfedge_Mesh::HalfedgeRef h,
-    Halfedge_Mesh::VertexRef v4, bool alloc_first_edge);
+    std::optional<EdgeRef> divide_face(HalfedgeRef h, VertexRef v4, bool alloc_first_edge);
 
     /*
         Returns a new edge by dividing a triangle into top and bottom.
@@ -269,8 +267,7 @@ public:
         e2: Last Edge (e6, e7)
         v4: Newly created vertex when splitting edge.
     */
-    std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::divide_face(Halfedge_Mesh::EdgeRef e,
-    Halfedge_Mesh::HalfedgeRef h1, Halfedge_Mesh::EdgeRef e2, Halfedge_Mesh::VertexRef v4);
+    std::optional<EdgeRef> divide_face(EdgeRef e, HalfedgeRef h1, EdgeRef e2, VertexRef v4);
 
     /*
         Creates a face in place of the vertex, returning a pointer to the new face
