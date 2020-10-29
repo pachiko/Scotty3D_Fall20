@@ -321,8 +321,9 @@ public:
 
     /*
         Splits all non-triangular faces into triangles.
+        Has the option to choose zig-zag or single vertex.
     */
-    void triangulate();
+    void triangulate(bool zigzag=true);
 
     /*
         Compute new vertex positions for a mesh that splits each polygon

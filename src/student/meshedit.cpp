@@ -642,11 +642,126 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3> &start_position
 
 /*
     Splits all non-triangular faces into triangles.
+    Has the option to choose zig-zag or single vertex.
 */
-void Halfedge_Mesh::triangulate() {
+void Halfedge_Mesh::triangulate(bool zigzag) {
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+       if (f->degree() > 3) {
+            unsigned int j = f->degree() - 3;
+            HalfedgeRef h = f->halfedge();
+            VertexRef v0 = h->vertex();
+            HalfedgeRef n = h->next();
+            std::vector<HalfedgeRef> h2s; // used in zig-zag
 
-    // For each face...
+            for (unsigned int i = 0; i < j; i++) {
+                HalfedgeRef tn = n->next(); // keep track of next
+                HalfedgeRef h1 = new_halfedge();
+                HalfedgeRef h2 = new_halfedge();
+                FaceRef nf = new_face();
+                EdgeRef e = new_edge();
+
+                // Joining connectivity
+                n->next() = h1;
+                h1->next() = h;
+                if (zigzag) {
+                    h2s.push_back(h2);
+                } else {
+                    h2->next() = tn;
+                }
+
+                // Setting twin
+                h2->twin() = h1;
+                h1->twin() = h2;
+
+                // Setting vertex
+                h2->vertex() = v0;
+                h1->vertex() = tn->vertex();
+
+                // Setting face 
+                h1->face() = nf;
+                n->face() = nf;
+                h->face() = nf;
+                nf->halfedge() = h1;
+
+                // Setting edge
+                h1->edge() = e;
+                h2->edge() = e;
+                e->halfedge() = h1;
+
+                // Update references
+                if (zigzag) {
+                    h = tn;
+                    n = tn->next();
+                    v0 = tn->vertex();
+                } else {
+                    h = h2;
+                    n = tn;
+                }
+            }
+
+            // Final Face. Join connectivity and update face
+            if (zigzag) {
+                HalfedgeRef h0 = h;
+                for (unsigned int i = 0; i < j; i++) {
+                    h->next() = h2s[i];
+                    h2s[i]->face() = f;
+                    h = h2s[i];
+                }
+                h->next() = h0;
+            } else {
+                h->face() = f;
+                n->next()->next() = h;
+            }
+            f->halfedge() = h;
+       }
+    } 
 }
+
+/*
+void Halfedge_Mesh::triangulate() {
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+       if (f->degree() > 3) {
+            unsigned int j = f->degree() - 3;
+            HalfedgeRef h = f->halfedge();
+            VertexRef v0 = h->vertex();
+            HalfedgeRef n = h->next();
+
+            for (unsigned int i = 0; i < j; i++) {
+                HalfedgeRef tn = n->next();
+                HalfedgeRef h1 = new_halfedge();
+                HalfedgeRef h2 = new_halfedge();
+                FaceRef nf = new_face();
+                EdgeRef e = new_edge();
+
+                n->next() = h1;
+                h1->next() = h;
+                h2->next() = tn;
+
+                h2->twin() = h1;
+                h1->twin() = h2;
+
+                h2->vertex() = v0;
+                h1->vertex() = tn->vertex();
+
+                h1->face() = nf;
+                n->face() = nf;
+                h->face() = nf;
+                nf->halfedge() = h1;
+
+                h1->edge() = e;
+                h2->edge() = e;
+                e->halfedge() = h1;
+
+                h = h2;
+                n = tn;
+            }
+            h->face() = f;
+            f->halfedge() = h;
+            n->next()->next() = h;
+       }
+    } 
+}
+*/
 
 /* Note on the quad subdivision process:
 

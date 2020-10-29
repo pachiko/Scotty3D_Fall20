@@ -620,10 +620,17 @@ std::string Model::UIsidebar(Undo &undo, Widgets &widgets, Scene_Maybe obj_opt, 
     auto sel = selected_element();
 
     ImGui::Text("Global Operations");
-    if (ImGui::Button("Triangulate")) {
+    if (ImGui::Button("Triangulate (Fixed Point)")) {
         mesh.copy_to(before);
         return update_mesh_global(undo, obj, std::move(before), [](Halfedge_Mesh &m) {
-            m.triangulate();
+            m.triangulate(false);
+            return true;
+        });
+    }
+    if (ImGui::Button("Triangulate (Zig-Zag)")) {
+        mesh.copy_to(before);
+        return update_mesh_global(undo, obj, std::move(before), [](Halfedge_Mesh &m) {
+            m.triangulate(true);
             return true;
         });
     }
