@@ -717,52 +717,6 @@ void Halfedge_Mesh::triangulate(bool zigzag) {
     } 
 }
 
-/*
-void Halfedge_Mesh::triangulate() {
-    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
-       if (f->degree() > 3) {
-            unsigned int j = f->degree() - 3;
-            HalfedgeRef h = f->halfedge();
-            VertexRef v0 = h->vertex();
-            HalfedgeRef n = h->next();
-
-            for (unsigned int i = 0; i < j; i++) {
-                HalfedgeRef tn = n->next();
-                HalfedgeRef h1 = new_halfedge();
-                HalfedgeRef h2 = new_halfedge();
-                FaceRef nf = new_face();
-                EdgeRef e = new_edge();
-
-                n->next() = h1;
-                h1->next() = h;
-                h2->next() = tn;
-
-                h2->twin() = h1;
-                h1->twin() = h2;
-
-                h2->vertex() = v0;
-                h1->vertex() = tn->vertex();
-
-                h1->face() = nf;
-                n->face() = nf;
-                h->face() = nf;
-                nf->halfedge() = h1;
-
-                h1->edge() = e;
-                h2->edge() = e;
-                e->halfedge() = h1;
-
-                h = h2;
-                n = tn;
-            }
-            h->face() = f;
-            f->halfedge() = h;
-            n->next()->next() = h;
-       }
-    } 
-}
-*/
-
 /* Note on the quad subdivision process:
 
         Unlike the local mesh operations (like bevel or edge flip), we will perform
