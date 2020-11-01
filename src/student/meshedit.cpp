@@ -777,13 +777,30 @@ void Halfedge_Mesh::linear_subdivide_positions() {
 
     // For each vertex, assign Vertex::new_pos to
     // its original position, Vertex::pos.
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        v->new_pos = v->pos;
+    }
 
     // For each edge, assign the midpoint of the two original
     // positions to Edge::new_pos.
+    for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+        Vec3 a = e->halfedge()->vertex()->pos;
+        Vec3 b = e->halfedge()->twin()->vertex()->pos;
+        e->new_pos = (a + b)/2;
+    }
 
     // For each face, assign the centroid (i.e., arithmetic mean)
     // of the original vertex positions to Face::new_pos. Note
     // that in general, NOT all faces will be triangles!
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+        Vec3 accum = Vec3();
+        HalfedgeRef h = f->halfedge();
+        do {
+            accum += h->vertex()->pos;
+            h = h->next();
+        } while (h != f->halfedge());
+        f->new_pos = accum/float(f->degree());
+    }
 }
 
 /*
@@ -800,15 +817,48 @@ void Halfedge_Mesh::catmullclark_subdivide_positions() {
 
     // The implementation for this routine should be
     // a lot like Halfedge_Mesh:linear_subdivide_positions:(),
-    // except that the calculation of the positions themsevles is
+    // except that the calculation of the positions themselves is
     // slightly more involved, using the Catmull-Clark subdivision
     // rules. (These rules are outlined in the Developer Manual.)
 
     // Faces
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+        Vec3 accum = Vec3();
+        HalfedgeRef h = f->halfedge();
+        do {
+            accum += h->vertex()->pos;
+            h = h->next();
+        } while (h != f->halfedge());
+        f->new_pos = accum/float(f->degree());
+    }
 
     // Edges
+    for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+        HalfedgeRef h = e->halfedge();
+        HalfedgeRef t = h->twin();
+        Vec3 a = h->vertex()->pos;
+        Vec3 b = t->vertex()->pos;
+        Vec3 c = h->face()->new_pos;
+        Vec3 d = t->face()->new_pos;
+        e->new_pos = (a + b + c + d)/4;
+    }
 
     // Vertices
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        HalfedgeRef h = v->halfedge();
+        Vec3 q = Vec3();
+        Vec3 r = Vec3();
+        do {
+            HalfedgeRef t = h->twin();
+            q += h->face()->new_pos;
+            r += (h->vertex()->pos + t->vertex()->pos) / 2; // NOT THE EDGE'S NEW_POS
+            h = t->next(); // CCW is faster. Next face is h->twin()->next()
+        } while (h != v->halfedge());
+        float n = float(v->degree());
+        q /= n;
+        r /= n;
+        v->new_pos = (q + 2*r + (v->pos)*(n - 3)) /n;
+    }
 }
 
 /*
