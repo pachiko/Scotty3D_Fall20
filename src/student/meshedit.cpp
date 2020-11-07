@@ -288,7 +288,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh:
 
     EdgeRef e6 = divide_face(h0, v4, false).value();
     EdgeRef e7 = divide_face(h3, v4, true).value();
-    e6->is_new = true; e7->is_new = true;
+    e6->is_new = true; e7->is_new = true; // only 2 are is_new
     divide_face(h3->edge(), h1, e6, v4);
     divide_face(e0, h4, e7, v4);
     v4->halfedge() = h0->twin(); // h15
@@ -306,7 +306,7 @@ Halfedge_Mesh::VertexRef v4, bool alloc_first_edge) {
     FaceRef f = h->face(); // f0, f1
     f->halfedge() = h;
 
-    if (alloc_first_edge) { // only e5
+    if (alloc_first_edge) { // only e5 (not is_new, just like e0)
         EdgeRef e5 = new_edge();
         h->edge() = e5;
         e5->halfedge() = h;
@@ -943,7 +943,7 @@ void Halfedge_Mesh::loop_subdivide() {
         EdgeRef nextEdge = e_old;
         nextEdge++;
 
-        // now, even if splitting the edge deletes it...
+        // now, even if splitting the edge deletes it... (I don't delete original edges in split_edge)
         VertexRef v = split_edge(e_old).value();
         v->is_new = true;
         v->new_pos = e_old->new_pos;
@@ -953,6 +953,7 @@ void Halfedge_Mesh::loop_subdivide() {
     }
 
     // Finally, flip any NEW edge that connects an old AND new vertex.
+    // In split_edge, only 2 out of 3 newly-alloc edges are is_new. 
     for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
         if (e->is_new) {
             VertexRef v0 = e->halfedge()->vertex();
