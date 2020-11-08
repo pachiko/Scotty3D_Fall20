@@ -8,7 +8,7 @@ namespace PT {
 
 Spectrum Pathtracer::trace_pixel(size_t x, size_t y) {
 
-    Vec2 xy((float)x, (float)y);
+    Vec2 xy((float)x, (float)y); // Raster/Image space [0, w];[0, h]
     Vec2 wh((float)out_w, (float)out_h);
 
     // TODO (PathTracer): Task 1
@@ -21,8 +21,15 @@ Spectrum Pathtracer::trace_pixel(size_t x, size_t y) {
 
     // This currently generates a ray at the bottom left of the pixel every time.
 
-    Ray out = camera.generate_ray(xy / wh);
+    float pdf;
+    // Uniform() uses size=1.f, by default
+    // Without super-sampling, just use pixel center
+    xy += (n_samples > 1) ? Samplers::Rect::Uniform().sample(pdf) : Vec2(.5f);
+
+    Ray out = camera.generate_ray(xy / wh); // NDC space ([0, 1] instead of [-1, 1])
     out.depth = max_depth;
+
+    if (RNG::coin_flip(0.0005f)) log_ray(out, 10.0f); // log .05% of rays, at timestep 10
     return trace_ray(out);
 }
 

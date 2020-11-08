@@ -8,30 +8,56 @@ BBox Triangle::bbox() const {
 
     // TODO (PathTracer): Task 2
     // compute the bounding box of the triangle
+    Vec3 p0 = vertex_list[v0].position;
+    Vec3 p1 = vertex_list[v1].position;
+    Vec3 p2 = vertex_list[v2].position;
+    
+    float xmin,ymin,zmin,xmax,ymax,zmax;
 
-    BBox box;
-    return box;
+    xmin = std::min(p0.x, std::min(p1.x, p2.x));
+    ymin = std::min(p0.y, std::min(p1.y, p2.y));
+    zmin = std::min(p0.z, std::min(p1.z, p2.z));
+
+    xmax = std::max(p0.x, std::max(p1.x, p2.x));
+    ymax = std::max(p0.y, std::max(p1.y, p2.y));
+    zmax = std::max(p0.z, std::max(p1.z, p2.z));
+    return BBox(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax));
 }
 
 Trace Triangle::hit(const Ray &ray) const {
 
-    // Vertices of triangle - has postion and surface normal
+    // Vertices of triangle - has position and surface normal
     Tri_Mesh_Vert v_0 = vertex_list[v0];
     Tri_Mesh_Vert v_1 = vertex_list[v1];
     Tri_Mesh_Vert v_2 = vertex_list[v2];
-    (void)v_0;
-    (void)v_1;
-    (void)v_2;
 
     // TODO (PathTracer): Task 2
     // Intersect this ray with a triangle defined by the three above points.
+    Vec3 e1 = v_1.position - v_0.position; // p1 - p0
+    Vec3 e2 = v_2.position - v_0.position; // p2 - p0
+    Vec3 s = ray.point - v_0.position; // o - p0
+
+    Vec3 sXnd = cross(s, -ray.dir); // (o - p0) X (-d)
+    Vec3 e1Xe2 = cross(e1, e2); // (p1 - p0) X (p2 - p0)
+
+    // Cramer's Rule: A^-1 = 1/det(A)*adj(A)
+    float det = dot(e1Xe2, -ray.dir); // det([a b c]) = (a x b).c
+    if (det == 0) {Trace ret; ret.hit = false; return ret;}
+    // adj(A) y = |y b c|, |a y c|, |a b y|
+    float u = -dot(sXnd, e2)/det;
+    float v = dot(sXnd, e1)/det;
+    float t = dot(e1Xe2, s)/det;
 
     Trace ret;
-    ret.hit = false;       // was there an intersection?
-    ret.time = 0.0f;       // at what time did the intersection occur?
-    ret.position = Vec3{}; // where was the intersection?
-    ret.normal = Vec3{};   // what was the surface normal at the intersection?
-                           // (this should be interpolated between the three vertex normals)
+    // was there an intersection?
+    ret.hit = (u >= 0) && (u <= 1) && (v >= 0) && (v <= 1) && (t <= ray.time_bounds.y) && (t >= ray.time_bounds.x);
+    if (!ret.hit) return ret;
+    ret.time = t; // at what time did the intersection occur?
+    ray.time_bounds.y = t;
+    ret.position = ray.at(t); // where was the intersection?
+    // what was the surface normal at the intersection?
+    // (this should be interpolated between the three vertex normals)
+    ret.normal = (1 - u - v)*v_0.normal + u*v_1.normal + v*v_2.normal;
     return ret;
 }
 

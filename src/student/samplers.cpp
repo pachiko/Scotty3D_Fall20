@@ -10,9 +10,10 @@ Vec2 Rect::Uniform::sample(float &pdf) const {
     // TODO (PathTracer): Task 1
     // Generate a uniformly random point on a rectangle of size size.x * size.y
     // Tip: RNG::unit()
-
-    pdf = 1.0f; // the PDF should integrate to 1 over the whole rectangle
-    return Vec2();
+    float rx = RNG::unit(); // generate a random x
+    float ry = RNG::unit(); // generate a random y
+    pdf =  1.f/(size.x*size.y); // the PDF should integrate to 1 over the whole rectangle
+    return Vec2(rx*size.x, ry*size.y);
 }
 
 Vec3 Hemisphere::Cosine::sample(float &pdf) const {
