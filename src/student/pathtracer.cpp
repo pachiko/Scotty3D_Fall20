@@ -44,13 +44,22 @@ Spectrum Pathtracer::trace_ray(const Ray &ray) {
         return {};
     }
 
+    // If we're using a two-sided material, treat back-faces the same as front-faces
+    const BSDF &bsdf = materials[hit.material];
+    if(!bsdf.is_sided() && dot(hit.normal, ray.dir) > 0.0f) {
+        hit.normal = -hit.normal;
+    }
+
     // Set up a coordinate frame at the hit point, where the surface normal becomes {0, 1, 0}
     // This gives us out_dir and later in_dir in object space, where computations involving the
     // normal become much easier. For example, cos(theta) = dot(N,dir) = dir.y!
     Mat4 object_to_world = Mat4::rotate_to(hit.normal);
     Mat4 world_to_object = object_to_world.T();
     Vec3 out_dir = world_to_object.rotate(ray.point - hit.position).unit();
-    const BSDF &bsdf = materials[hit.material];
+
+    // Debugging: if the normal colors flag is set, return the normal color
+    if(debug_data.normal_colors)
+        return Spectrum::direction(hit.normal);
 
     // Now we can compute the rendering equation at this point.
     // We split it into two stages: sampling lighting (i.e. directly connecting
@@ -58,12 +67,10 @@ Spectrum Pathtracer::trace_ray(const Ray &ray) {
     // to create a new path segment.
 
     // TODO (PathTracer): Task 5
-    // Instead of initializing this value to a constant color, use the direct,
-    // indirect lighting components calculated in the code below. The starter
-    // code sets radiance_out to (0.5,0.5,0.5) so that you can test your geometry
-    // queries before you implement path tracing.
-    Spectrum radiance_out =
-        debug_data.normal_colors ? Spectrum::direction(hit.normal) : Spectrum(0.5f);
+    // The starter code sets radiance_out to (0.5,0.5,0.5) so that you can test your geometry
+    // queries before you implement path tracing. You should change this to (0,0,0) and accumulate
+    // the direct and indirect lighting computed below.
+    Spectrum radiance_out = Spectrum(0.5f);
     {
         auto sample_light = [&](const auto &light) {
             // If the light is discrete (e.g. a point light), then we only need
