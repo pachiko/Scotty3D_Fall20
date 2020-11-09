@@ -54,10 +54,10 @@ Trace Triangle::hit(const Ray &ray) const {
 
     Trace ret;
     // was there an intersection?
-    ret.hit = (u >= 0) && (u <= 1) && (v >= 0) && (v <= 1) && (t <= ray.time_bounds.y) && (t >= ray.time_bounds.x);
+    ret.hit = (u >= 0) && (v >= 0) && (1 - u - v >= 0) && (t <= ray.time_bounds.y) && (t >= ray.time_bounds.x);
     if (!ret.hit) return ret;
     ret.time = t; // at what time did the intersection occur?
-    ray.time_bounds.y = t;
+    ray.time_bounds.y = t; // update time bounds for efficiency
     ret.position = ray.at(t); // where was the intersection?
     // what was the surface normal at the intersection?
     // (this should be interpolated between the three vertex normals)
