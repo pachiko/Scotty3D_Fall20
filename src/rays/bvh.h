@@ -31,7 +31,7 @@ private:
         friend class BVH<Primitive>;
     };
     size_t new_node(BBox box = {}, size_t start = 0, size_t size = 0, size_t l = 0, size_t r = 0);
-
+    void recursive_build(const size_t node_idx, const size_t max_leaf_size);
     std::vector<Node> nodes;
     std::vector<Primitive> primitives;
     size_t root_idx = 0;

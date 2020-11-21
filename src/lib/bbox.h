@@ -74,6 +74,9 @@ struct BBox {
 
     // TODO (PathTracer): see student/bbox.cpp
     bool hit(const Ray &ray, Vec2 &times) const;
+    
+    // Compare intersection times to see if ray misses box
+    bool checkHit(const std::vector<float> tmins, const std::vector<float> tmaxs) const;
 
     /// Get the eight corner points of the bounding box
     std::vector<Vec3> corners() const {
