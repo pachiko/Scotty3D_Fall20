@@ -35,10 +35,11 @@ const size_t start, const size_t size) {
     float width = (max_r - min_r) / nBuckets;
 
     // Set buckets' range
-    std::vector<Bucket<Primitive>> buckets(nBuckets);
+    std::vector<Bucket<Primitive>> buckets;
     for (size_t i = 0; i < nBuckets; i++) {
-        Bucket<Primitive> b = buckets[i];
+        Bucket<Primitive> b;
         b.max_t = min_r + (i + 1)*width;
+        buckets.push_back(b);
     }
     
     return std::move(buckets);
@@ -57,7 +58,6 @@ size_t computeBucket(float centroid, const std::vector<Bucket<Primitive>> &bucke
 
 template <typename Primitive>
 void BVH<Primitive>::build(std::vector<Primitive> &&prims, size_t max_leaf_size) {
-
     // NOTE (PathTracer):
     // This BVH is parameterized on the type of the primitive it contains. This allows
     // us to build a BVH over any type that defines a certain interface. Specifically,
@@ -103,7 +103,7 @@ void BVH<Primitive>::build(std::vector<Primitive> &&prims, size_t max_leaf_size)
 template <typename Primitive> void BVH<Primitive>::recursive_build(const size_t node_idx,
 const size_t max_leaf_size) {
     // Recursively build BVH
-    Node& n = nodes[node_idx];
+    Node* n = &nodes[node_idx];
 
     // Keep track of min-cost partition and it's data for the current node
     float minCost = FLT_MAX;
@@ -112,15 +112,15 @@ const size_t max_leaf_size) {
 
     // Find min cost amongst all partitions, all planes
     for (size_t axis = 0; axis < 3; axis++) {
-        std::vector<Bucket<Primitive>> buckets = initBuckets(axis, primitives, n.start, n.size);
+        std::vector<Bucket<Primitive>> buckets = initBuckets(axis, primitives, n->start, n->size); // ok start
 
         // Bucket the primitives
-        for (size_t p = n.start; p < n.size; p++) {
-            Primitive& prim = primitives[p];
-            float centroid = (prim.bbox().min[int(axis)] + prim.bbox().max[int(axis)]) / 2.f;
+        for (size_t p = n->start; p < n->start + n->size; p++) {
+            Primitive* prim = &primitives[p];
+            float centroid = (prim->bbox().min[int(axis)] + prim->bbox().max[int(axis)]) / 2.f; // not so simple.
             size_t b = computeBucket(centroid, buckets);
-            buckets[b].bbox.enclose(prim.bbox());
-            buckets[b].prims.push_back(&prim);
+            buckets[b].bbox.enclose(prim->bbox());
+            buckets[b].prims.push_back(prim);
         }
 
         // Partition B - 1 times
@@ -139,8 +139,8 @@ const size_t max_leaf_size) {
             }
 
             // Evaluate cost
-            float cost = lb.surface_area()/n.bbox.surface_area()*lp.size() +
-             rb.surface_area()/n.bbox.surface_area()*rp.size();
+            float cost = lb.surface_area()/n->bbox.surface_area()*lp.size() +
+             rb.surface_area()/n->bbox.surface_area()*rp.size();
             
             // Update minimum
             if (cost < minCost) {
@@ -150,24 +150,70 @@ const size_t max_leaf_size) {
                 rightPrims = std::move(rp);
                 cost = minCost;
             }
+
+            // clear!
+            lp.clear();
+            rp.clear();
         }
+        // clear !
+        buckets.clear();
+    }
+
+    // Tie-breaker
+    bool recalcBound = false;
+    if (leftPrims.size() == 0) {
+        leftPrims.assign(rightPrims.begin(), rightPrims.begin() + rightPrims.size()/2);
+        rightPrims.erase(rightPrims.begin(), rightPrims.begin() + rightPrims.size()/2);
+        recalcBound = true;
+    } else if (rightPrims.size() == 0) {
+        rightPrims.assign(leftPrims.begin(), leftPrims.begin() + leftPrims.size()/2);
+        leftPrims.erase(leftPrims.begin(), leftPrims.begin() + leftPrims.size()/2);
+        recalcBound = true;
+    }
+    if (recalcBound) {
+        BBox new_rb, new_lb;
+        for (size_t i = 0; i < rightPrims.size(); i++) {
+            new_rb.enclose((*rightPrims[i]).bbox());
+        }
+        for (size_t i = 0; i < leftPrims.size(); i++) {
+            new_lb.enclose((*leftPrims[i]).bbox()); 
+        }
+        rightBox = std::move(new_rb);
+        leftBox = std::move(new_lb);
     }
 
     // Create child nodes using best partition; Assign to current node
-    size_t leftChild = new_node(leftBox, n.start, leftPrims.size(), 0, 0);
-    size_t rightChild = new_node(rightBox, n.start + leftPrims.size(), rightPrims.size(), 0, 0);
-    n.l = leftChild;
-    n.r = rightChild;
+    size_t leftChild = new_node(leftBox, n->start, leftPrims.size(), 0, 0); // OK start before this
+    n = &nodes[node_idx];
+    size_t rightChild = new_node(rightBox, n->start + leftPrims.size(), rightPrims.size(), 0, 0); // NOT OK START AT THIS
+    n = &nodes[node_idx];
+    n->l = leftChild;
+    n->r = rightChild;
 
-    // Concat left and right node's primitives
-    leftPrims.insert(leftPrims.end(), rightPrims.begin(), rightPrims.end());
+    std::vector<Primitive> temp_prims;
+    for (size_t i = 0; i < leftPrims.size(); i++) {
+        temp_prims.push_back(std::move(*leftPrims[i]));
+    }
+    for (size_t i = 0; i < rightPrims.size(); i++) {
+        temp_prims.push_back(std::move(*rightPrims[i]));
+    }
 
     // Write back primitives
-    for(size_t i = 0; i < leftPrims.size(); i++) {
-        primitives[n.start + i] = *(leftPrims[i]);
+    // primitives.insert(primitives.begin() + n->start, temp_prims.begin(), temp_prims.end());
+    std::move(temp_prims.begin(), temp_prims.begin() + temp_prims.size(), primitives.begin() + n->start);
+
+    // Clear!
+    temp_prims.clear();
+
+    // recurse
+    if (leftPrims.size() > max_leaf_size)  {
+        leftPrims.clear();
+        recursive_build(leftChild, max_leaf_size);
     }
-    if (leftPrims.size() > max_leaf_size) recursive_build(leftChild, max_leaf_size); // recurse
-    if (rightPrims.size() > max_leaf_size) recursive_build(rightChild, max_leaf_size); // recurse
+    if (rightPrims.size() > max_leaf_size) {
+        rightPrims.clear();
+        recursive_build(rightChild, max_leaf_size);
+    }
 }
 
 template <typename Primitive> Trace BVH<Primitive>::hit(const Ray &ray) const {
