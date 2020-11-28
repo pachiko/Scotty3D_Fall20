@@ -112,12 +112,12 @@ const size_t max_leaf_size) {
 
     // Find min cost amongst all partitions, all planes
     for (size_t axis = 0; axis < 3; axis++) {
-        std::vector<Bucket<Primitive>> buckets = initBuckets(axis, primitives, n->start, n->size); // ok start
+        std::vector<Bucket<Primitive>> buckets = initBuckets(axis, primitives, n->start, n->size);
 
         // Bucket the primitives
         for (size_t p = n->start; p < n->start + n->size; p++) {
             Primitive* prim = &primitives[p];
-            float centroid = (prim->bbox().min[int(axis)] + prim->bbox().max[int(axis)]) / 2.f; // not so simple.
+            float centroid = (prim->bbox().min[int(axis)] + prim->bbox().max[int(axis)]) / 2.f;
             size_t b = computeBucket(centroid, buckets);
             buckets[b].bbox.enclose(prim->bbox());
             buckets[b].prims.push_back(prim);
@@ -183,13 +183,14 @@ const size_t max_leaf_size) {
     }
 
     // Create child nodes using best partition; Assign to current node
-    size_t leftChild = new_node(leftBox, n->start, leftPrims.size(), 0, 0); // OK start before this
+    size_t leftChild = new_node(leftBox, n->start, leftPrims.size(), 0, 0);
     n = &nodes[node_idx];
-    size_t rightChild = new_node(rightBox, n->start + leftPrims.size(), rightPrims.size(), 0, 0); // NOT OK START AT THIS
+    size_t rightChild = new_node(rightBox, n->start + leftPrims.size(), rightPrims.size(), 0, 0);
     n = &nodes[node_idx];
     n->l = leftChild;
     n->r = rightChild;
 
+    // Rearrange primitives
     std::vector<Primitive> temp_prims;
     for (size_t i = 0; i < leftPrims.size(); i++) {
         temp_prims.push_back(std::move(*leftPrims[i]));
@@ -199,7 +200,6 @@ const size_t max_leaf_size) {
     }
 
     // Write back primitives
-    // primitives.insert(primitives.begin() + n->start, temp_prims.begin(), temp_prims.end());
     std::move(temp_prims.begin(), temp_prims.begin() + temp_prims.size(), primitives.begin() + n->start);
 
     // Clear!
@@ -227,15 +227,50 @@ template <typename Primitive> Trace BVH<Primitive>::hit(const Ray &ray) const {
     // Again, remember you can use hit() on any Primitive value.
 
     Trace ret;
-    for (const Primitive &prim : primitives) {
-        Trace hit = prim.hit(ray);
-        ret = Trace::min(ret, hit);
-    }
+    ret.time = FLT_MAX;
+    find_closest_hit(ray, 0, ret);
     return ret;
 }
 
+template <typename Primitive> void BVH<Primitive>::find_closest_hit(const Ray &ray, const size_t nodeIdx,
+Trace &closest) const {
+    Node n = nodes[nodeIdx];
+    Vec2 times = Vec2(ray.time_bounds.x, ray.time_bounds.y);
+    bool hitBox = n.bbox.hit(ray, times);
+    if (!hitBox || (times.x > closest.time)) return;
+
+    if (n.is_leaf()) {
+        for (size_t i = n.start; i < n.start + n.size; i++) {
+            Trace trc = primitives[i].hit(ray);
+            closest = Trace::min(closest, trc);
+            // If neither hits, Trace::min() returns a default Trace. Set the time again.
+            if (closest.time == 0.f && !closest.hit) closest.time = FLT_MAX;
+        }
+    } else {
+        // Times for left and right child node bbox hits
+        Vec2 timeL = Vec2(ray.time_bounds.x, ray.time_bounds.y);
+        Vec2 timeR = Vec2(ray.time_bounds.x, ray.time_bounds.y);
+
+        // Don't really need the booleans
+        nodes[n.l].bbox.hit(ray, timeL);
+        nodes[n.r].bbox.hit(ray, timeR);
+
+        // Determine which child node was hit first
+        bool isLeftFirst = timeL.x <= timeR.x;
+        size_t firstIdx = (isLeftFirst) ? n.l : n.r;
+        size_t secondIdx = (isLeftFirst) ? n.r : n.l;
+        float secondHitTime = (isLeftFirst) ? timeR.x : timeL.x;
+
+        // Try nearer node first. Then try further node in-case
+        find_closest_hit(ray, firstIdx, closest);
+        if (secondHitTime < closest.time) find_closest_hit(ray, secondIdx, closest);
+    }
+}
+
+
 template <typename Primitive>
 BVH<Primitive>::BVH(std::vector<Primitive> &&prims, size_t max_leaf_size) {
+    // Dont think anybody calls this constructor
     build(std::move(prims), max_leaf_size); // transfer ownership to build()
 }
 

@@ -31,17 +31,19 @@ Trace Sphere::hit(const Ray &ray) const {
 
     // RAY DIRECTION MUST BE UNIT IF YOU USE 
     // THE SIMPLIFIED QUADRATIC FORMULA IN SLIDES (not used here)
+    Vec3 d = ray.dir;
     // Vec3 d = ray.dir.unit();
-    float od = dot(ray.point, ray.dir);
-    float d2 = ray.dir.norm_squared();
-    float o2 = ray.point.norm_squared();
-    float discriminant = od*od - d2*(o2 - radius); // b^2 - 4ac
+    Vec3 o = ray.point - Vec3(); // Ray origin wrt sphere center (already centered in this codebase)
+    float od = dot(o, d);
+    float d2 = d.norm_squared();
+    float o2 = o.norm_squared();
+    float discriminant = od*od - d2*(o2 - radius*radius); // b^2 - 4ac
     float t = 0.f;
     bool hit = false;
 
     if (discriminant < 0) {}
     else if (discriminant == 0) {
-        t = -od;
+        t = -od/d2;
         hit = (t <= ray.time_bounds.y && t >= ray.time_bounds.x);
     } else {
         float root_discriminant = sqrtf(discriminant);
@@ -63,7 +65,7 @@ Trace Sphere::hit(const Ray &ray) const {
     ret.time = t; // at what time did the intersection occur?
     ray.time_bounds.y = t; // update time bounds for efficiency
     ret.position = ray.at(t); // where was the intersection?
-    ret.normal = ret.position; // what was the surface normal at the intersection?
+    ret.normal = ret.position.normalize(); // what was the surface normal at the intersection?
     return ret;
 }
 

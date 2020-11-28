@@ -81,6 +81,7 @@ void Tri_Mesh::build(const GL::Mesh &mesh) {
 
     std::vector<Triangle> tris;
     for (size_t i = 0; i < idxs.size(); i += 3) {
+        // verts.data returns a direct pointer to the data. vectors are guaranteed to be contiguous
         tris.push_back(Triangle(verts.data(), idxs[i], idxs[i + 1], idxs[i + 2]));
     }
 

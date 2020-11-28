@@ -42,9 +42,10 @@ bool BBox::hit(const Ray &ray, Vec2 &times) const {
     bool hit = checkHit(tmins, tmaxs);
 
     // Update timebounds
-    times.x = *std::max_element(tmins.begin(), tmins.end());
-    times.y = *std::min_element(tmaxs.begin(), tmaxs.end());
-
+    if (hit) {
+        times.x = *std::max_element(tmins.begin(), tmins.end());
+        times.y = *std::min_element(tmaxs.begin(), tmaxs.end());
+    }
     return hit;
 }
 
