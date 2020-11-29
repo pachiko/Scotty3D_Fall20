@@ -21,19 +21,19 @@ bool BBox::hit(const Ray &ray, Vec2 &times) const {
     std::vector<float> tmins, tmaxs;
 
     // Does not intersect if NaN 
-    if (!isnan(txmin) && !isnan(txmax)) {
+    if (!std::isnan(txmin) && !std::isnan(txmax)) {
         // Swap times if ray is going from max to min (opposite direction)
         if (txmin > txmax) std::swap(txmin, txmax);
         // Collect times that are within bounds
         if (txmin <= times.y && txmin >= times.x) tmins.push_back(txmin);
         if (txmax <= times.y && txmax >= times.x) tmaxs.push_back(txmax);
     }
-    if (!isnan(tymin) && !isnan(tymax)) {
+    if (!std::isnan(tymin) && !std::isnan(tymax)) {
         if (tymin > tymax) std::swap(tymin, tymax);
         if (tymin <= times.y && tymin >= times.x) tmins.push_back(tymin);
         if (tymax <= times.y && tymax >= times.x) tmaxs.push_back(tymax);
     }
-    if (!isnan(tzmin) && !isnan(tzmax)) {
+    if (!std::isnan(tzmin) && !std::isnan(tzmax)) {
         if (tzmin > tzmax) std::swap(tzmin, tzmax);
         if (tzmin <= times.y && tzmin >= times.x) tmins.push_back(tzmin);
         if (tzmax <= times.y && tzmax >= times.x) tmaxs.push_back(tzmax);
