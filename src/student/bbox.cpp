@@ -9,56 +9,58 @@ bool BBox::hit(const Ray &ray, Vec2 &times) const {
     // If the ray intersected the bounding box within the range given by
     // [times.x,times.y], update times with the new intersection times.
 
-    // Calculate intersection times with each side
-    float txmin = (min.x - ray.point.x)/ (ray.dir.x);
-    float txmax = (max.x - ray.point.x)/ (ray.dir.x);
-    float tymin = (min.y - ray.point.y)/ (ray.dir.y);
-    float tymax = (max.y - ray.point.y)/ (ray.dir.y);
-    float tzmin = (min.z - ray.point.z)/ (ray.dir.z);
-    float tzmax = (max.z - ray.point.z)/ (ray.dir.z);
+    // holders for tmin and tmax
+    float tmin, tmax;
 
-    // Vectors containing earliest and latest intersection times with each plane
-    std::vector<float> tmins, tmaxs;
+    // holders for inverse of direction
+    float invx = 1/ray.dir.x;
 
-    // Does not intersect if NaN 
-    if (!std::isnan(txmin) && !std::isnan(txmax)) {
-        // Swap times if ray is going from max to min (opposite direction)
-        if (txmin > txmax) std::swap(txmin, txmax);
-        // Collect times that are within bounds
-        if (txmin <= times.y && txmin >= times.x) tmins.push_back(txmin);
-        if (txmax <= times.y && txmax >= times.x) tmaxs.push_back(txmax);
-    }
-    if (!std::isnan(tymin) && !std::isnan(tymax)) {
-        if (tymin > tymax) std::swap(tymin, tymax);
-        if (tymin <= times.y && tymin >= times.x) tmins.push_back(tymin);
-        if (tymax <= times.y && tymax >= times.x) tmaxs.push_back(tymax);
-    }
-    if (!std::isnan(tzmin) && !std::isnan(tzmax)) {
-        if (tzmin > tzmax) std::swap(tzmin, tzmax);
-        if (tzmin <= times.y && tzmin >= times.x) tmins.push_back(tzmin);
-        if (tzmax <= times.y && tzmax >= times.x) tmaxs.push_back(tzmax);
+    // Why inverse of direction? -0.0 == 0.0, BUT 1/-0.0 = -inf.
+    if (invx >= 0) {
+        tmin = (min.x - ray.point.x)*invx;
+        tmax = (max.x - ray.point.x)*invx;
+    } else {
+        tmin = (max.x - ray.point.x)*invx;
+        tmax = (min.x - ray.point.x)*invx;
     }
 
-    bool hit = checkHit(tmins, tmaxs);
-
-    // Update timebounds
-    if (hit) {
-        times.x = *std::max_element(tmins.begin(), tmins.end());
-        times.y = *std::min_element(tmaxs.begin(), tmaxs.end());
+    // Do the same for Y
+    float tymin, tymax;
+    float invy = 1/ray.dir.y;
+    if (invy >= 0) {
+        tymin = (min.y - ray.point.y)*invy;
+        tymax = (max.y - ray.point.y)*invy;
+    } else {
+        tymin = (max.y - ray.point.y)*invy;
+        tymax = (min.y - ray.point.y)*invy;
     }
-    return hit;
-}
 
-bool BBox::checkHit(const std::vector<float> tmins, const std::vector<float> tmaxs) const {
-    // Helps to compare each tmax with tmins, if any tmax < any tmin, return hit=false
-    // If any vector is empty, then return hit=false
-    bool hit = false;
-    for (auto tmin : tmins) {
-        for (auto tmax: tmaxs) {
-            if (!hit) hit = !hit; // true... for now, since neither vector is empty
-            if (tmin > tmax) return false;
-        }
+    // Any min > max is not possible to result in hit
+    if (tymin > tmax || tmin > tymax) return false;
+    else {
+        // tighten intersection time
+        if (tymin > tmin) tmin = tymin;
+        if (tymax < tmax) tmax = tymax;
     }
-    return hit;
 
+    // Do the same for Z
+    float tzmin, tzmax;
+    float invz = 1/ray.dir.z;
+    if (invz >= 0) {
+        tzmin = (min.z - ray.point.z)*invz;
+        tzmax = (max.z - ray.point.z)*invz;
+    } else {
+        tzmin = (max.z - ray.point.z)*invz;
+        tzmax = (min.z - ray.point.z)*invz;
+    }
+    if (tzmin > tmax || tmin > tzmax) return false;
+    else {
+        if (tzmin > tmin) tmin = tzmin;
+        if (tzmax < tmax) tmax = tzmax;
+    }
+
+    // update time bounds. Does not block further queries if out-of-bounds
+    if (times.x < tmin) times.x = tmin;
+    if (times.y > tmax) times.y = tmax;
+    return true;
 }
