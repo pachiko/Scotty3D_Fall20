@@ -29,7 +29,7 @@ struct BSDF_Lambertian {
     Spectrum evaluate(Vec3 out_dir, Vec3 in_dir) const;
 
     Spectrum albedo;
-    Samplers::Hemisphere::Uniform sampler;
+    Samplers::Hemisphere::Cosine sampler;
 };
 
 struct BSDF_Mirror {

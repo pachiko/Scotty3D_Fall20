@@ -1,9 +1,9 @@
 
 #include "../rays/shapes.h"
 #include "debug.h"
+#include <iostream>
 
 namespace PT {
-
 const char *Shape_Type_Names[(int)Shape_Type::count] = {"None", "Sphere"};
 
 BBox Sphere::bbox() const {
@@ -33,7 +33,7 @@ Trace Sphere::hit(const Ray &ray) const {
     // THE SIMPLIFIED QUADRATIC FORMULA IN SLIDES (not used here)
     Vec3 d = ray.dir;
     // Vec3 d = ray.dir.unit();
-    Vec3 o = ray.point - Vec3(); // Ray origin wrt sphere center (already centered in this codebase)
+    Vec3 o = ray.point;
     float od = dot(o, d);
     float d2 = d.norm_squared();
     float o2 = o.norm_squared();
@@ -41,14 +41,12 @@ Trace Sphere::hit(const Ray &ray) const {
     float t = 0.f;
     bool hit = false;
 
-    if (discriminant < 0) {}
-    else if (discriminant == 0) {
-        t = -od/d2;
-        hit = (t <= ray.time_bounds.y && t >= ray.time_bounds.x);
+    if (discriminant <= 0) {
     } else {
-        float root_discriminant = sqrtf(discriminant);
-        float t1 = (-od + root_discriminant)/d2; // later
-        float t2 = (-od - root_discriminant)/d2; // earlier
+        float root_discriminant = sqrt(discriminant);
+        float t1 = (-od + root_discriminant)/(d2); // later
+        float t2 = (-od - root_discriminant)/(d2); // earlier
+
         if (t2 <= ray.time_bounds.y && t2 >= ray.time_bounds.x) {
             t = t2;
             hit = true;
@@ -65,7 +63,7 @@ Trace Sphere::hit(const Ray &ray) const {
     ret.time = t; // at what time did the intersection occur?
     ray.time_bounds.y = t; // update time bounds for efficiency
     ret.position = ray.at(t); // where was the intersection?
-    ret.normal = ret.position.normalize(); // what was the surface normal at the intersection?
+    ret.normal = ret.position.unit(); // what was the surface normal at the intersection?
     return ret;
 }
 

@@ -9,7 +9,7 @@ Vec3 reflect(Vec3 dir) {
 
     // TODO (PathTracer): Task 6
     // Return reflection of dir about the surface normal (0,1,0).
-    return Vec3();
+    return Vec3(-dir.x, dir.y, -dir.z);
 }
 
 Vec3 refract(Vec3 out_dir, float index_of_refraction, bool &was_internal) {
@@ -26,7 +26,21 @@ Vec3 refract(Vec3 out_dir, float index_of_refraction, bool &was_internal) {
     // you want to compute the 'input' direction that would cause this output,
     // and to do so you can simply find the direction that out_dir would refract
     // _to_, as refraction is symmetric.
-    return Vec3();
+    
+    float cos_i_sqr = out_dir.y*out_dir.y;
+    float eta_i_over_t = (out_dir.y > 0) ? 1.f/index_of_refraction : index_of_refraction;
+
+    float cos_t_sqr = 1 - (eta_i_over_t*eta_i_over_t)*(1 - cos_i_sqr);
+    if (cos_t_sqr < 0) {
+        was_internal = true;
+        return {};
+    }
+
+    float cos_t = sqrtf(cos_t_sqr);
+    if (out_dir.y > 0) cos_t *= -1;
+    was_internal = false;
+    return Vec3(-out_dir.x*eta_i_over_t, cos_t, -out_dir.z*eta_i_over_t);
+
 }
 
 BSDF_Sample BSDF_Lambertian::sample(Vec3 out_dir) const {
@@ -35,9 +49,9 @@ BSDF_Sample BSDF_Lambertian::sample(Vec3 out_dir) const {
     // Implement lambertian BSDF. Use of BSDF_Lambertian::sampler may be useful
 
     BSDF_Sample ret;
-    ret.attenuation = Spectrum(); // What is the ratio of reflected/incoming light?
-    ret.direction = Vec3();       // What direction should we sample incoming light from?
-    ret.pdf = 0.0f;               // Was was the PDF of the sampled direction?
+    Vec3 in_dir = sampler.sample(ret.pdf); // What was the PDF of the sampled direction?
+    ret.attenuation = evaluate(out_dir, in_dir); // What is the ratio of reflected/incoming light? The higher the brighter
+    ret.direction = in_dir;       // What direction should we sample incoming light from?        
     return ret;
 }
 
@@ -51,9 +65,9 @@ BSDF_Sample BSDF_Mirror::sample(Vec3 out_dir) const {
     // Implement mirror BSDF
 
     BSDF_Sample ret;
-    ret.attenuation = Spectrum(); // What is the ratio of reflected/incoming light?
-    ret.direction = Vec3();       // What direction should we sample incoming light from?
-    ret.pdf = 0.0f; // Was was the PDF of the sampled direction? (In this case, the PMF)
+    ret.attenuation = reflectance; // What is the ratio of reflected/incoming light?
+    ret.direction = reflect(out_dir); // What direction should we sample incoming light from?
+    ret.pdf = 1.f; // Was was the PDF of the sampled direction? (In this case, the PMF)
     return ret;
 }
 
@@ -77,10 +91,25 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
 
     // Be wary of your eta1/eta2 ratio - are you entering or leaving the surface?
 
+    float eta_i = 1.f; float eta_t = index_of_refraction;
+    if (out_dir.y < 0.f) std::swap(eta_i, eta_t);
+    float R0 = (eta_i - eta_t) / (eta_i + eta_t);
+    R0 *= R0;
+    float fresnel_reflectance = R0 + (1 - R0)*std::powf((1 - std::abs(out_dir.y)), 5.f);
+
     BSDF_Sample ret;
-    ret.attenuation = Spectrum(); // What is the ratio of reflected/incoming light?
-    ret.direction = Vec3();       // What direction should we sample incoming light from?
-    ret.pdf = 0.0f; // Was was the PDF of the sampled direction? (In this case, the PMF)
+
+    if (RNG::coin_flip(fresnel_reflectance)) {
+        ret.attenuation = reflectance;
+        ret.direction = reflect(out_dir);
+        ret.pdf = fresnel_reflectance;
+    } else {
+        bool was_internal;
+        ret.direction = refract(out_dir, index_of_refraction, was_internal);
+        ret.attenuation = was_internal? reflectance : transmittance;
+        ret.pdf = 1.f - fresnel_reflectance;
+    }
+    
     return ret;
 }
 
@@ -109,11 +138,11 @@ BSDF_Sample BSDF_Refract::sample(Vec3 out_dir) const {
     // Implement pure refraction BSDF.
 
     // Be wary of your eta1/eta2 ratio - are you entering or leaving the surface?
-
+    bool was_internal;
     BSDF_Sample ret;
-    ret.attenuation = Spectrum(); // What is the ratio of reflected/incoming light?
-    ret.direction = Vec3();       // What direction should we sample incoming light from?
-    ret.pdf = 0.0f; // Was was the PDF of the sampled direction? (In this case, the PMF)
+    ret.attenuation = transmittance; // What is the ratio of reflected/incoming light?
+    ret.direction = refract(out_dir, index_of_refraction, was_internal);       // What direction should we sample incoming light from?
+    ret.pdf = 1.f; // Was was the PDF of the sampled direction? (In this case, the PMF)
     return ret;
 }
 

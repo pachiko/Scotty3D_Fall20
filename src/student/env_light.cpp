@@ -1,7 +1,7 @@
 
 #include "../rays/env_light.h"
 #include "debug.h"
-
+#include <iostream>
 #include <limits>
 
 namespace PT {
@@ -30,7 +30,33 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     // Find the incoming light along a given direction by finding the corresponding
     // place in the enviornment image. You should bi-linearly interpolate the value
     // between the 4 image pixels nearest to the exact direction.
-    return Spectrum();
+
+    dir.normalize();
+    float theta = std::acos(-dir.y);
+    float phi = std::atan2(dir.z, dir.x) + PI_F;
+
+    size_t w = image.dimension().first; 
+    size_t h = image.dimension().second;
+
+    float x = phi/(2*PI_F)*w;
+    float y = theta/PI_F*h;
+
+    size_t lx = (size_t) floor(x); 
+    size_t ly = (size_t) floor(y);
+    lx = std::clamp(lx, size_t(0), w - 1);
+    ly = std::clamp(ly, size_t(0), h - 1);
+    size_t ux = std::clamp(lx + 1, size_t(0), w - 1); 
+    size_t uy = std::clamp(ly + 1, size_t(0), h - 1); 
+
+    Spectrum lxly = image.at(lx, ly);
+    Spectrum lxuy = image.at(lx, uy);
+    Spectrum uxly = image.at(ux, ly);
+    Spectrum uxuy = image.at(ux, uy);
+
+    float s = std::clamp(x - lx, 0.f, 1.f);
+    float t = std::clamp(y - ly, 0.f, 1.f);
+
+    return (lxly*(1 - s) + uxly*s) * (1 - t) + (lxuy*(1 - s) + uxuy*s) * t;
 }
 
 Light_Sample Env_Hemisphere::sample() const {

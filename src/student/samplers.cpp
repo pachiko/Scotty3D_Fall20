@@ -20,7 +20,19 @@ Vec3 Hemisphere::Cosine::sample(float &pdf) const {
 
     // TODO (PathTracer): Task 6
     // You may implement this, but don't have to.
-    return Vec3();
+
+    float Xi1 = RNG::unit();
+    float Xi2 = RNG::unit();
+
+    float theta = std::asin(std::sqrtf(Xi1));
+    float phi = 2.0f * PI_F * Xi2;
+
+    float xs = std::sin(theta) * std::cos(phi);
+    float ys = std::cos(theta);
+    float zs = std::sin(theta) * std::sin(phi);
+
+    pdf = ys / PI_F; // PDF = cos(theta)/pi
+    return Vec3(xs, ys, zs);
 }
 
 Vec3 Sphere::Uniform::sample(float &pdf) const {
@@ -28,9 +40,11 @@ Vec3 Sphere::Uniform::sample(float &pdf) const {
     // TODO (PathTracer): Task 7
     // Generate a uniformly random point on the unit sphere (or equivalently, direction)
     // Tip: start with Hemisphere::Uniform
+    Vec3 dir = hemi.sample(pdf);
+    if (RNG::coin_flip(0.5f)) dir.y *= -1.f;
 
-    pdf = 1.0f; // what was the PDF at the chosen direction?
-    return Vec3();
+    pdf = 1.f/(4*PI_F); // what was the PDF at the chosen direction?
+    return dir;
 }
 
 Sphere::Image::Image(const HDR_Image &image) {
