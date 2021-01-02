@@ -58,6 +58,16 @@ Sphere::Image::Image(const HDR_Image &image) {
     const auto [_w, _h] = image.dimension();
     w = _w;
     h = _h;
+
+    // Calculate Lsintheta across the image. Accumulate to normalize the pdf to 1 later.
+    for (size_t j = 0; j < h; j++) {
+        for (size_t i = 0; i < w; i++) {
+            // 0.5f at the pixel center. Else we never sample top and bottom rows
+            float Lsintheta = image.at(i, j).luma() * sin(PI_F*(j + 0.5f)/h);
+            total += Lsintheta;
+            cdf.push_back(total); // Joint Cdf. P(theta, phi)
+        }
+    }
 }
 
 Vec3 Sphere::Image::sample(float &out_pdf) const {
@@ -66,8 +76,24 @@ Vec3 Sphere::Image::sample(float &out_pdf) const {
     // Use your importance sampling data structure to generate a sample direction.
     // Tip: std::upper_bound can easily binary search your CDF
 
-    out_pdf = 1.0f; // what was the PDF (again, PMF here) of your chosen sample?
-    return Vec3();
+    float Xi = RNG::unit();
+
+    auto lower = std::lower_bound(cdf.begin(), cdf.end(), Xi*total); // cdf is not normalized yet. Scale the RV
+    auto index = std::distance(cdf.begin(), lower);
+    out_pdf = *lower;
+    if (index > 0) out_pdf -= cdf[index - 1]; // pdf[index] = cdf[index] - cdf[index - 1]
+    out_pdf /= total;
+
+    size_t row = index/h;
+    size_t column = index%h;
+    float theta = (row + 0.5f)*PI_F/h;
+    float phi = (column + 0.5f)*2*PI_F/w;
+
+    float xs = std::sin(theta) * std::cos(phi);
+    float ys = std::cos(theta);
+    float zs = std::sin(theta) * std::sin(phi);
+
+    return Vec3(xs, ys, zs);
 }
 
 Vec3 Point::sample(float &pmf) const {

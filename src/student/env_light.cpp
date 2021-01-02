@@ -13,12 +13,12 @@ Light_Sample Env_Map::sample() const {
 
     // TODO (PathTracer): Task 7
     // Uniformly sample the sphere. Tip: implement Samplers::Sphere::Uniform
-    Samplers::Sphere::Uniform uniform;
-    ret.direction = uniform.sample(ret.pdf);
+    // Samplers::Sphere::Uniform uniform;
+    // ret.direction = uniform.sample(ret.pdf);
 
     // Once you've implemented Samplers::Sphere::Image, remove the above and
     // uncomment this line to use importance sampling instead.
-    // ret.direction = sampler.sample(ret.pdf);
+    ret.direction = sampler.sample(ret.pdf);
 
     ret.radiance = sample_direction(ret.direction);
     return ret;
@@ -41,8 +41,8 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     float x = phi/(2*PI_F)*w;
     float y = theta/PI_F*h;
 
-    size_t lx = (size_t) floor(x); 
-    size_t ly = (size_t) floor(y);
+    size_t lx = (size_t) floor(x - 0.5f); 
+    size_t ly = (size_t) floor(y - 0.5f);
     lx = std::clamp(lx, size_t(0), w - 1);
     ly = std::clamp(ly, size_t(0), h - 1);
     size_t ux = std::clamp(lx + 1, size_t(0), w - 1); 
@@ -53,8 +53,8 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     Spectrum uxly = image.at(ux, ly);
     Spectrum uxuy = image.at(ux, uy);
 
-    float s = std::clamp(x - lx, 0.f, 1.f);
-    float t = std::clamp(y - ly, 0.f, 1.f);
+    float s = std::clamp(x - lx - 0.5f, 0.f, 1.f);
+    float t = std::clamp(y - ly - 0.5f, 0.f, 1.f);
 
     return (lxly*(1 - s) + uxly*s) * (1 - t) + (lxuy*(1 - s) + uxuy*s) * t;
 }
