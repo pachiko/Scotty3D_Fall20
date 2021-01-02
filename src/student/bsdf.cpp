@@ -95,7 +95,7 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
     if (out_dir.y < 0.f) std::swap(eta_i, eta_t);
     float R0 = (eta_i - eta_t) / (eta_i + eta_t);
     R0 *= R0;
-    float fresnel_reflectance = R0 + (1 - R0)*std::powf((1 - std::abs(out_dir.y)), 5.f);
+    float fresnel_reflectance = R0 + (1 - R0)*std::pow((1 - std::abs(out_dir.y)), 5.f);
 
     BSDF_Sample ret;
 
