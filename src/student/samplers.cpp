@@ -24,7 +24,7 @@ Vec3 Hemisphere::Cosine::sample(float &pdf) const {
     float Xi1 = RNG::unit();
     float Xi2 = RNG::unit();
 
-    float theta = std::asin(std::sqrtf(Xi1));
+    float theta = std::asin(sqrtf(Xi1));
     float phi = 2.0f * PI_F * Xi2;
 
     float xs = std::sin(theta) * std::cos(phi);
