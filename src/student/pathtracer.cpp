@@ -140,11 +140,11 @@ Spectrum Pathtracer::trace_ray(const Ray &ray) {
 
     // (5) add contribution due to incoming light with proper weighting
 
-    // Use attenuation as Russian Roulette probability
-    float pRR = 1.f - bsdf_sample.attenuation.luma();
-    pRR = std::clamp(pRR, 0.f, 1.0f);
     // if attenuation/reflection is low, more likely to terminate
-    if (RNG::unit() < pRR) return radiance_out;
+    // Terminate 50% of all contributions if Luma < 0.3
+    float pRR = 1.f;
+    if (bsdf_sample.attenuation.luma() < 0.3f) pRR = 0.5f;
+    if (RNG::unit() > pRR) return radiance_out;
   
     // Create bounced-ray
     Ray bounced_ray(hit.position, object_to_world.rotate(bsdf_sample.direction));
@@ -152,7 +152,7 @@ Spectrum Pathtracer::trace_ray(const Ray &ray) {
     bounced_ray.depth = ray.depth + 1;
 
     Spectrum absorbsion = bsdf_sample.attenuation;
-    radiance_out += absorbsion * trace_ray(bounced_ray) * std::abs(bsdf_sample.direction.y) / (bsdf_sample.pdf * (1 - pRR));
+    radiance_out += absorbsion * trace_ray(bounced_ray) * std::abs(bsdf_sample.direction.y) / (bsdf_sample.pdf * pRR);
 
     return radiance_out;
 }

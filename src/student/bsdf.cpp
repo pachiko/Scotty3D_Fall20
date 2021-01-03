@@ -65,8 +65,8 @@ BSDF_Sample BSDF_Mirror::sample(Vec3 out_dir) const {
     // Implement mirror BSDF
 
     BSDF_Sample ret;
-    ret.attenuation = reflectance; // What is the ratio of reflected/incoming light?
     ret.direction = reflect(out_dir); // What direction should we sample incoming light from?
+    ret.attenuation = reflectance/std::abs(ret.direction.y); // What is the ratio of reflected/incoming light?
     ret.pdf = 1.f; // Was was the PDF of the sampled direction? (In this case, the PMF)
     return ret;
 }
@@ -100,13 +100,13 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
     BSDF_Sample ret;
 
     if (RNG::coin_flip(fresnel_reflectance)) {
-        ret.attenuation = reflectance;
         ret.direction = reflect(out_dir);
+        ret.attenuation = reflectance/std::abs(ret.direction.y);
         ret.pdf = fresnel_reflectance;
     } else {
         bool was_internal;
         ret.direction = refract(out_dir, index_of_refraction, was_internal);
-        ret.attenuation = was_internal? reflectance : transmittance;
+        ret.attenuation = (was_internal? reflectance : transmittance)/std::abs(ret.direction.y);
         ret.pdf = 1.f - fresnel_reflectance;
     }
     
@@ -140,8 +140,8 @@ BSDF_Sample BSDF_Refract::sample(Vec3 out_dir) const {
     // Be wary of your eta1/eta2 ratio - are you entering or leaving the surface?
     bool was_internal;
     BSDF_Sample ret;
-    ret.attenuation = transmittance; // What is the ratio of reflected/incoming light?
-    ret.direction = refract(out_dir, index_of_refraction, was_internal);       // What direction should we sample incoming light from?
+    ret.direction = refract(out_dir, index_of_refraction, was_internal); // What direction should we sample incoming light from?
+    ret.attenuation = transmittance/std::abs(ret.direction.y); // What is the ratio of reflected/incoming light?
     ret.pdf = 1.f; // Was was the PDF of the sampled direction? (In this case, the PMF)
     return ret;
 }
