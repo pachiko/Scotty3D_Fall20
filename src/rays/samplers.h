@@ -63,8 +63,12 @@ struct Image {
     Vec3 sample(float &pdf) const;
 
     size_t w = 0, h = 0;
-    std::vector<float> pdf, cdf;
-    float total = 0.0f;
+    std::vector<float> marginal_func;
+    std::vector<float> marginal_cdf;
+    std::vector<std::vector<float>> conditional_func;
+    std::vector<std::vector<float>> conditional_cdf;
+
+    float marginal_I = 0.0f;
 };
 
 } // namespace Sphere
