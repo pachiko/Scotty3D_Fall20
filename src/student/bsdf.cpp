@@ -9,6 +9,9 @@ Vec3 reflect(Vec3 dir) {
 
     // TODO (PathTracer): Task 6
     // Return reflection of dir about the surface normal (0,1,0).
+
+    // In general: -wo + 2 * Dot(wo, n) * n
+    // -(wo - 2*(wo.n)n) from particle simulation
     return Vec3(-dir.x, dir.y, -dir.z);
 }
 
@@ -28,17 +31,25 @@ Vec3 refract(Vec3 out_dir, float index_of_refraction, bool &was_internal) {
     // _to_, as refraction is symmetric.
     
     float cos_i_sqr = out_dir.y*out_dir.y;
-    float eta_i_over_t = (out_dir.y > 0) ? 1.f/index_of_refraction : index_of_refraction;
+    // if out_dir > 0, incident ray is 0 - 90 deg wrt surface normal (ie. in vacuum)
+    float eta_i_over_t = (out_dir.y >= 0) ? 1.f/index_of_refraction : index_of_refraction;
 
-    float cos_t_sqr = 1 - (eta_i_over_t*eta_i_over_t)*(1 - cos_i_sqr);
+    float cos_t_sqr = 1.f - (eta_i_over_t*eta_i_over_t)*(1.f - cos_i_sqr); // Derive with Snell's Law
     if (cos_t_sqr < 0) {
         was_internal = true;
-        return {};
+        return {}; // we explicitly calculate the reflected direction later, if TIR.
     }
 
     float cos_t = sqrtf(cos_t_sqr);
-    if (out_dir.y > 0) cos_t *= -1;
+    if (out_dir.y >= 0) cos_t *= -1.f; // refraction inverts the initial y-direction
     was_internal = false;
+    
+    // Eqn (8.8) of PBR Book 3rd Ed. Reflection Models: Specular Reflection and Transmission
+    // wt = eta_In/eta_Tx*(-wi) + [eta_In/eta_Tx*(wi.n) - cos_Tx]n
+    // since n = (0, 1, 0)
+    // wt = (-eta_In/eta_Tx*wi.x,
+    //      -eta_In/eta_Tx*wi.y + [eta_In/eta_Tx*wi.y - cos_Tx] = -cos_Tx,
+    //      -eta_In/eta_Tx*wi.z)
     return Vec3(-out_dir.x*eta_i_over_t, cos_t, -out_dir.z*eta_i_over_t);
 
 }
@@ -91,27 +102,37 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
 
     // Be wary of your eta1/eta2 ratio - are you entering or leaving the surface?
 
-    float eta_i = 1.f; float eta_t = index_of_refraction;
-    if (out_dir.y < 0.f) std::swap(eta_i, eta_t);
-    float R0 = (eta_i - eta_t) / (eta_i + eta_t);
-    R0 *= R0;
-    float fresnel_reflectance = R0 + (1 - R0)*std::pow((1 - std::abs(out_dir.y)), 5.f);
+    bool was_internal;
+    Vec3 refracted = refract(out_dir, index_of_refraction, was_internal); // could be TIR, could be refraction
+
+    float fresnel = 1.f; // assume it was TIR first.
+
+    if (!was_internal) { // NOT TIR. Time for Fresnel
+        // Schlick's Approx. for Fresnel Coeff.
+        float cosI = std::abs(out_dir.y);
+        float r0 = (1.f - index_of_refraction)/(1.f + index_of_refraction);
+        r0 = r0*r0;
+        fresnel = r0 + (1 - r0)*pow(1.f - cosI, 5);
+    }
 
     BSDF_Sample ret;
-
-    if (RNG::coin_flip(fresnel_reflectance)) {
+    // You must multiply attenuation with fresnel, since it gives the fraction of light scattered
+    // Scatter = Reflect + Transmit/Refract
+    if (RNG::coin_flip(fresnel)) { // reflect or TIR
         ret.direction = reflect(out_dir);
-        ret.attenuation = reflectance/std::abs(ret.direction.y);
-        ret.pdf = fresnel_reflectance;
-    } else {
-        bool was_internal;
-        ret.direction = refract(out_dir, index_of_refraction, was_internal);
-        ret.attenuation = (was_internal? reflectance : transmittance)/std::abs(ret.direction.y);
-        ret.pdf = 1.f - fresnel_reflectance;
+        ret.attenuation = fresnel/std::abs(out_dir.y)*reflectance; // see Section 8.2.2 Specular Reflection
+        ret.pdf = fresnel;
+    } else { // refract
+        ret.direction = refracted;
+        float eta_t_over_i = (out_dir.y >= 0) ? index_of_refraction : 1.f/index_of_refraction;
+        // see Section 8.2.3 Specular Transmission
+        ret.attenuation = eta_t_over_i*eta_t_over_i*(1.f - fresnel)/std::abs(out_dir.y)*transmittance;
+        ret.pdf = 1.f - fresnel;
     }
     
     return ret;
 }
+
 
 Spectrum BSDF_Glass::evaluate(Vec3 out_dir, Vec3 in_dir) const {
     // As with BSDF_Mirror, just assume that we never hit the correct
