@@ -35,14 +35,15 @@ const size_t start, const size_t size) {
     float width = (max_r - min_r) / nBuckets;
 
     // Set buckets' range
-    std::vector<Bucket<Primitive>> buckets;
+    std::vector<Bucket<Primitive>> buckets; 
     for (size_t i = 0; i < nBuckets; i++) {
         Bucket<Primitive> b;
         b.max_t = min_r + (i + 1)*width;
         buckets.push_back(b);
     }
     
-    return std::move(buckets);
+    return buckets;
+    // return std::move(buckets); // moving a local object in a return statement prevents copy ellision
 }
 
 // Compute index of bucket

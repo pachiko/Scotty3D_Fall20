@@ -112,7 +112,7 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
         float cosI = std::abs(out_dir.y);
         float r0 = (1.f - index_of_refraction)/(1.f + index_of_refraction);
         r0 = r0*r0;
-        fresnel = r0 + (1 - r0)*pow(1.f - cosI, 5);
+        fresnel = r0 + (1.f - r0)*pow(1.f - cosI, 5.f);
     }
 
     BSDF_Sample ret;
