@@ -31,9 +31,13 @@ Spectrum Env_Map::sample_direction(Vec3 dir) const {
     // place in the enviornment image. You should bi-linearly interpolate the value
     // between the 4 image pixels nearest to the exact direction.
 
+    // DEBUG with mirror sphere
     dir.normalize();
-    float theta = std::acos(-dir.y);
-    float phi = std::atan2(dir.z, dir.x) + PI_F;
+    float theta = std::acos(-dir.y); // theta = 0, y = H
+    float phi = std::atan2(dir.z, dir.x); // I feel like there is a bug with z and x. It got swapped all over the code
+    if (phi < 0) {
+        phi += 2*PI_F; // -PI does not equal 0, but PI!
+    }
 
     size_t w = image.dimension().first; 
     size_t h = image.dimension().second;
