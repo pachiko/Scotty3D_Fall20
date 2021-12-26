@@ -5,6 +5,7 @@
 #include "../geometry/halfedge.h"
 #include "debug.h"
 
+
 /* Note on local operation return types:
 
     The local operations all return a std::optional<T> type. This is used so that your
@@ -44,49 +45,75 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh:
     merged face.
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::EdgeRef e) {
-    if (e->on_boundary()) {
-        (void)e;
+    // Could be neither/both are boundary half-edges. In that case, degree wins!
+    HalfedgeRef winningHalf, losingHalf;
+    if (e->halfedge()->is_boundary() == e->halfedge()->twin()->is_boundary()) { // same type, check degree
+        winningHalf = e->halfedge()->face()->degree() > e->halfedge()->twin()->face()->degree()?
+            e->halfedge() : e->halfedge()->twin();
+    } else { // boundary wins
+        winningHalf = e->halfedge()->is_boundary()? e->halfedge() : e->halfedge()->twin();
+    }
+    losingHalf = winningHalf->twin();
+
+    // Check for boundary edges in losing face
+    // They will be deleted together, unless there are no edges left
+    std::set<EdgeRef> additional;
+    HalfedgeRef h = losingHalf->next();
+    bool atLeastOneNonBoundary = false;
+    while(h != losingHalf) {
+        if(h->twin()->is_boundary()) {
+            additional.insert(h->edge());
+        } else {
+            atLeastOneNonBoundary = true;
+        }
+        h = h->next();
+    }
+    if (!atLeastOneNonBoundary && e->on_boundary()) {
         return std::nullopt;
     }
-
-    // Keep track of face 0 and the two halfedges along e
-    FaceRef f0 = e->halfedge()->face();
-    HalfedgeRef h0 =  e->halfedge();
-    HalfedgeRef h1 = h0->twin();
-
-    // v1 points to h0->next; v0 points to h1->next
-    h0->vertex()->halfedge() = h1->next();
-    h1->vertex()->halfedge() = h0->next();
-
-    // f0 points to h0->next
-    f0->halfedge() = h0->next();
-
-    // to get h1->prev and assign it's next to h0->next
-    HalfedgeRef h = h1->next();
-    while (true) {
-         // Also assign face 0 for face 1's halfedges while we're at it :)
-        h->face() = f0;
-        if (h->next() == h1) {
-            h->next() = h0->next();
-            break;
-        }
+ 
+    // Assign winning face to losing halfedges
+    // get previous half-edge of losing halfedge
+    h = losingHalf->next();
+    HalfedgeRef prevLosing;
+    while(h != losingHalf) {
+        h->face() = winningHalf->face();
         h = h->next();
+        if (h->next() == losingHalf) prevLosing = h;
+    }
+
+    // get previous half-edge of winning halfedge
+    h = winningHalf->next();
+    HalfedgeRef prevWinning;
+    while(h != winningHalf) {
+        h = h->next();
+        if (h->next() == winningHalf) prevWinning = h;
     }
     
-    //  to get h0->prev and assign it's next to h1->next
-    h = h0->next();
-    while (true) {
-        if (h->next() == h0) {
-            h->next() = h1->next();
-            break;
+    // Connect halfedges and vertices
+    prevLosing->next() = winningHalf->next();
+    prevWinning->next() = losingHalf->next();
+    winningHalf->vertex()->halfedge() = losingHalf->next();
+    losingHalf->vertex()->halfedge() = winningHalf->next();
+    winningHalf->face()->halfedge() = winningHalf->next();
+
+    // Cleanup
+    erase(e);
+    erase(winningHalf);
+    erase(losingHalf);
+    erase(losingHalf->face());
+
+    // Additional boundary edges to kill
+    FaceRef res = winningHalf->face();
+    for (auto& add : additional) {
+        if (auto o = erase_edge(add)) {
+            res = o.value();
         }
-        h = h->next();
     }
 
-    // Deallocate edge, face 1, and h0 & h1
-    erase(e); erase(h1->face()); erase(h0); erase(h1);
-    return f0;
+    return res;
 }
+
 
 /*
     This method should collapse the given edge and return an iterator to
