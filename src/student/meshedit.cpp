@@ -35,9 +35,63 @@
     edges and faces with a single face, returning the new face.
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh::VertexRef v) {
+    std::set<EdgeRef> edgesToRemove;
 
-    (void)v;
-    return std::nullopt;
+    HalfedgeRef h = v->halfedge(); // initial halfedge
+    FaceRef f = h->face(); // keep this face (initially)
+    do { // find face to keep
+        FaceRef newFace = h->twin()->face();
+        if ((newFace->degree() > f->degree() && newFace->is_boundary() == f->is_boundary()) || 
+            (newFace->is_boundary() && !f->is_boundary())) {
+            f = newFace;
+        }
+        h = h->twin()->next();
+    } while(h != v->halfedge());
+    f->halfedge() = h->next(); // fix link
+    v->halfedge() = h; // start from this halfedge
+
+    do { // loop through neighboring faces
+        edgesToRemove.insert(h->edge());
+        HalfedgeRef fh = h; // face's halfedge
+
+        do { // loop through halfedges
+            h = h->next();
+            h->face() = f; // set face for other halfedges
+        } while(h->next()->next() != fh);
+
+        fh = h->next()->twin();  // get next face's halfedge
+        h->next() = h->next()->twin()->next(); // link!
+        h->next()->vertex()->halfedge() = h->next()->twin()->next(); // vertex fix
+        h = fh;
+    } while(h != v->halfedge());
+
+    for (auto& e: edgesToRemove) {
+        HalfedgeRef r = e->halfedge();
+        if (f->is_boundary() != r->face()->is_boundary() || // CANT COMPARE ITERATORS OF DIFF LIST (Boundary vs non)
+            r->face() != f) erase(r->face());
+        r = e->halfedge()->twin();
+        if (f->is_boundary() != r->face()->is_boundary() || // CANT COMPARE ITERATORS OF DIFF LIST (Boundary vs non)
+            r->face() != f) erase(r->face());
+        erase(e);
+        erase(e->halfedge());
+        erase(e->halfedge()->twin());
+    }
+    erase(v);
+
+
+    if (f->is_boundary()) { // remove standalone edges
+        h = f->halfedge();
+        HalfedgeRef fh = h; // start from this
+        do {
+            if (h->twin()->is_boundary()) {
+                if (auto o = erase_edge(h->edge())) {
+                    f = o.value();
+                }
+            }
+            h = h->next();
+        } while (h != fh);
+    }
+    return f;
 }
 
 /*
@@ -120,42 +174,38 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
     the new vertex created by the collapse.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Mesh::EdgeRef e0) {
-    if (e0->on_boundary()) {
-        (void) e0;
-        return std::nullopt;
-    }
-
     // calculate new vertex pos
     HalfedgeRef h0 = e0->halfedge();
-    HalfedgeRef h3 = h0->twin();
+    if (h0->is_boundary()) h0 = h0->twin();
+    HalfedgeRef h1 = h0->twin();
     VertexRef v0 = h0->vertex();
-    v0->pos = (v0->pos + h3->vertex()->pos)/2;
+    v0->pos = (v0->pos + h1->vertex()->pos)/2;
 
     // get face degree first. This changes on the fly!
     unsigned int f0d = h0->face()->degree();
-    unsigned int f3d = h3->face()->degree();
+    unsigned int f1d = h1->face()->degree();
 
     // Keep v0 and remove v1. All halfedges pointing to v1 are changed to point to v0
     HalfedgeRef h = h0->next();
-    while(h != h3) {
+    while(h != h1) {
         h->vertex() = v0;
         h = h->twin()->next();
     }
 
     // Reassign elements
     modify_face(h0, f0d, v0);
-    modify_face(h3, f3d);
+    modify_face(h1, f1d);
 
     // Deallocate
-    erase(h3->vertex());
+    erase(h1->vertex());
     erase(e0);
     erase(h0);
-    erase(h3);
+    erase(h1);
 
     if (f0d == 3) 
         remove_triangle(h0);
-    if (f3d == 3) 
-        remove_triangle(h3);
+    if (f1d == 3) 
+        remove_triangle(h1);
     
     return v0;
 }
