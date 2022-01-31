@@ -106,6 +106,18 @@ Halfedge_Mesh::ElementRef Halfedge_Mesh::copy_to(Halfedge_Mesh &mesh, unsigned i
     return ret;
 }
 
+// Convenience function to get the previous halfedge
+Halfedge_Mesh::HalfedgeRef Halfedge_Mesh::Halfedge::prev() {
+    // Hard to use this, since we want to do some additional operations
+    // while traversing. A function passed in needs to have a consistent interface..
+    HalfedgeRef self = twin()->twin();
+    HalfedgeRef h = self;
+    while(h->next() != self) {
+        h = h->next();
+    }
+    return h;
+}
+
 Vec3 Halfedge_Mesh::Vertex::neighborhood_center() const {
 
     Vec3 c;

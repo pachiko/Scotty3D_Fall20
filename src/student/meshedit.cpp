@@ -1,6 +1,6 @@
 
 #include <queue>
-#include <set>
+#include <unordered_set>
 #include <unordered_map>
 #include "../geometry/halfedge.h"
 #include "debug.h"
@@ -35,7 +35,7 @@
     edges and faces with a single face, returning the new face.
  */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_vertex(Halfedge_Mesh::VertexRef v) {
-    std::set<EdgeRef> edgesToRemove;
+    std::unordered_set<EdgeRef> edgesToRemove;
 
     HalfedgeRef h = v->halfedge(); // initial halfedge
     FaceRef f = h->face(); // keep this face (initially)
@@ -111,7 +111,7 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
 
     // Check for boundary edges in losing face
     // They will be deleted together, unless there are no edges left
-    std::set<EdgeRef> additional;
+    std::unordered_set<EdgeRef> additional;
     HalfedgeRef h = losingHalf->next();
     bool atLeastOneNonBoundary = false;
     while(h != losingHalf) {
@@ -193,8 +193,8 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     }
 
     // Reassign elements
-    modify_face(h0, f0d, v0);
-    modify_face(h1, f1d);
+    repair_face(h0, f0d, v0);
+    repair_face(h1, f1d);
 
     // Deallocate
     erase(h1->vertex());
@@ -211,12 +211,12 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
 }
 
 /*
-    This method modifies elements in a face (halfedges, vertices, edges) depending on the face degree.
+    This method repairs elements in a face (halfedges, vertices, edges) depending on the face degree.
     h: Inner halfedge on the edge to be collapsed.
     deg: Degree of the face
     v: vertex to be kept after collapsing edge. Needs to set its halfedge()
 */
-void Halfedge_Mesh::modify_face(Halfedge_Mesh::HalfedgeRef h, unsigned int deg,
+void Halfedge_Mesh::repair_face(Halfedge_Mesh::HalfedgeRef h, unsigned int deg,
 std::optional<Halfedge_Mesh::VertexRef> v) {
     // triangle deletes all its halfedges.
     // make the twins of the two halfedges adjacent to the triangle point to one another
@@ -260,8 +260,22 @@ void Halfedge_Mesh::remove_triangle(Halfedge_Mesh::HalfedgeRef h) {
     the new vertex created by the collapse.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
+    if (f->is_boundary()) return std::nullopt; // cant collapse boundary face!
 
-    (void)f;
+    // VertexRef v = new_vertex();
+    // v->pos = f->center();
+
+    // HalfedgeRef h = f->halfedge();
+    // do {
+    //     EdgeRef e = h->edge();
+    //     if (e->on_boundary()) continue;
+    //     HalfedgeRef hh = h->twin();
+
+    //     h = h->next();
+    // }
+    // while(h-> != f->halfedge());
+
+
     return std::nullopt;
 }
 
@@ -270,7 +284,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e0) {
-    if (e0->on_boundary()) {
+    if (e0->on_boundary()) { // No sense in flipping boundary edges!
         (void) e0;
         return std::nullopt;
     }
@@ -343,19 +357,29 @@ void Halfedge_Mesh::cycle_half_edge(HalfedgeRef h, std::optional<VertexRef> v,
     This method should split the given edge and return an iterator to the
     newly inserted vertex. The halfedge of this vertex should point along
     the edge that was split, rather than the new edges.
+    ASSUME e0 is horizontal !!!
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e0) {
-    // TODO: Allow on boundary splitting. The new vertex connects to 3 edges instead.
-
-    // Triangle meshes only!
-    if (e0->on_boundary() || e0->halfedge()->face()->degree() != 3 || e0->halfedge()->twin()->face()->degree() != 3) {
-        (void) e0;
-        return std::nullopt;
-    }  
-
     // Initialize new vertex
     HalfedgeRef h0 = e0->halfedge();
+    bool splitBottom = true;
+
+    if (h0->is_boundary() || h0->face()->degree() != 3) {
+        splitBottom = false; // this h0 will be h3 and we won't split it..
+        h0 = h0->twin();
+        if (h0->is_boundary() || h0->face()->degree() != 3) {
+            (void) e0;
+            return std::nullopt;
+        }
+    }
+
     HalfedgeRef h3 = h0->twin();
+    if (splitBottom) {
+        // ensure h3 is splitable if h0 was splitable earlier
+        splitBottom = h3->face()->degree() == 3 && !h3->is_boundary();
+    }
+    e0->halfedge() = h3;
+
     VertexRef v4 = new_vertex();
     v4->pos = (h0->vertex()->pos + h3->vertex()->pos)/2;
 
@@ -363,22 +387,36 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh:
     HalfedgeRef h1 = h0->next();
     HalfedgeRef h4 = h3->next();
 
-    EdgeRef e6 = divide_face(h0, v4, false).value();
-    EdgeRef e7 = divide_face(h3, v4, true).value();
-    e6->is_new = true; e7->is_new = true; // only 2 are is_new
-    divide_face(h3->edge(), h1, e6, v4);
-    divide_face(e0, h4, e7, v4);
+    // Part 1: add edges
+    EdgeRef e6 = split_face(h0, v4, true).value();
+    e6->is_new = true;
+
+    EdgeRef e7;
+    if (splitBottom) {
+        e7 = split_face(h3, v4, false).value();
+        e7->is_new = true; // at most 2 are is_new
+    }
+
+    // Part 2: add faces
+    add_face(h3, h1, e6->halfedge(), v4);
+    if (splitBottom) add_face(h0, h4, e7->halfedge(), v4);
+
+    if (!splitBottom) {
+        HalfedgeRef newBoundary = new_halfedge();
+        h0->twin() = newBoundary;
+        newBoundary->set_neighbors(h3->next(), h0, v4, h0->edge(), h3->face());
+        h3->next() = newBoundary;
+    }
     v4->halfedge() = h0->twin(); // h15
     return v4;
 }
 
 /*
-    Returns a new edge by dividing a triangle into top and bottom.
-    This deals with the bottom-left and top-right triangles.
-    h: existing halfedge on the splitting edge (h0, h3)
+    Returns a new edge by dividing a triangle into left and right.
+    h: existing halfedge on the flat, splitting edge (h0, h3)
     v4: Newly created vertex when splitting edge.
 */
-std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::divide_face(Halfedge_Mesh::HalfedgeRef h,
+std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::split_face(Halfedge_Mesh::HalfedgeRef h,
 Halfedge_Mesh::VertexRef v4, bool alloc_first_edge) {
     FaceRef f = h->face(); // f0, f1
     f->halfedge() = h;
@@ -391,50 +429,37 @@ Halfedge_Mesh::VertexRef v4, bool alloc_first_edge) {
 
     EdgeRef e1 = new_edge(); // e6, e7
     HalfedgeRef h2 = h->next()->next(); // h2, h5
-    h->next() = new_halfedge(); // h10, h11; remember to save h1 and h4 before this!
-    e1->halfedge() = h->next(); 
+    HalfedgeRef h1 = new_halfedge();
+    h->next() = h1; // h10, h11; remember to save h1 and h4 before this!
+    e1->halfedge() = h1; 
 
-    h->next()->edge() = e1;
-    h->next()->face() = f;
-    h->next()->next() = h2;
-    h->next()->vertex() = v4;
     // need to allocate twin of new halfedge. Done later when twin is created.
-
+    h1->set_neighbors(h2, halfedges_end(), v4, e1, f);
+    
     return e1;
 }
 
 /*
-    Returns a new edge by dividing a triangle into top and bottom.
-    This deals with the top-left and bottom-right triangles.
-    e: First Edge (e0, e5)
+    Adds the face after splitting the face.
+    he: Halfedges (h0, h3) containing First Edges (e0, e5; flat)
     h1: Second Halfedge (h1, h4)
-    e2: Last Edge (e6, e7)
+    h2: Last Edge (e6, e7; upright)
     v4: Newly created vertex when splitting edge.
 */
-std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::divide_face(Halfedge_Mesh::EdgeRef e,
-Halfedge_Mesh::HalfedgeRef h1, Halfedge_Mesh::EdgeRef e2, Halfedge_Mesh::VertexRef v4) {
+void Halfedge_Mesh::add_face(Halfedge_Mesh::HalfedgeRef he,
+Halfedge_Mesh::HalfedgeRef h1, Halfedge_Mesh::HalfedgeRef h2, Halfedge_Mesh::VertexRef v4) {
     FaceRef f = new_face(); // f2, f3
-    HalfedgeRef h = new_halfedge(); // h13, h15
-    h->face() = f;
-    f->halfedge() = h;
-
-    h->twin() = e->halfedge(); // h0, h3
-    e->halfedge()->twin() = h;
-    h->edge() = e; // e0, e5
-    h->vertex() = v4;
-    h->next() = h1; // h1, h4. Hope you saved them earlier!
-    
     h1->face() = f;
-    h1->next() = new_halfedge(); // h12, h14
 
-    h1->next()->twin() = e2->halfedge(); // h10, h11
-    h1->next()->edge() = e2; // e6, e7
-    e2->halfedge()->twin() = h1->next();
-    h1->next()->next() = h; // h13, h15
-    h1->next()->face() = f;
-    h1->next()->vertex() = h1->twin()->vertex();
-
-    return std::nullopt;
+    HalfedgeRef h = new_halfedge(); // h13, h15 (horizontal)
+    f->halfedge() = h;
+    he->twin() = h;
+    h->set_neighbors(h1, he, v4, he->edge(), f);
+    
+    HalfedgeRef newH2 = new_halfedge();
+    h1->next() = newH2;
+    h2->twin() = newH2;
+    newH2->set_neighbors(h, h2, h1->twin()->vertex(), h2->edge(), f);
 }
 
 /* Note on the beveling process:

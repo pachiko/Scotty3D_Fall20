@@ -216,12 +216,12 @@ public:
     std::optional<VertexRef> collapse_edge(EdgeRef e);
 
     /*
-        This method modifies elements in a face (halfedges, vertices, edges) depending on the face degree.
+        This method repairs elements in a face (halfedges, vertices, edges) depending on the face degree.
         h: Inner halfedge on the edge to be collapsed.
         deg: Degree of the face
         v: vertex to be kept after collapsing edge. Needs to set its halfedge()
     */
-    void modify_face(HalfedgeRef h, unsigned int deg, std::optional<VertexRef> v=std::nullopt);
+    void repair_face(HalfedgeRef h, unsigned int deg, std::optional<VertexRef> v=std::nullopt);
 
     /*
         This method should removes the halfedges, face and one edge.
@@ -252,22 +252,20 @@ public:
     std::optional<VertexRef> split_edge(EdgeRef e);
 
     /*
-        Returns a new edge by dividing a triangle into top and bottom.
-        This deals with the bottom-left and top-right triangles.
-        h: existing halfedge on the splitting edge (h0, h3)
+        Returns a new edge by dividing a triangle into left and right.
+        h: existing halfedge on the flat, splitting edge (h0, h3)
         v4: Newly created vertex when splitting edge.
     */
-    std::optional<EdgeRef> divide_face(HalfedgeRef h, VertexRef v4, bool alloc_first_edge);
+    std::optional<EdgeRef> split_face(HalfedgeRef h, VertexRef v4, bool alloc_first_edge);
 
     /*
-        Returns a new edge by dividing a triangle into top and bottom.
-        This deals with the top-left and bottom-right triangles.
-        e: First Edge (e0, e5)
+        Adds the face after splitting the face.
+        he: Halfedges (h0, h3) containing First Edges (e0, e5; flat)
         h1: Second Halfedge (h1, h4)
-        e2: Last Edge (e6, e7)
+        h2: Last Halfedge, newly added (e6, e7; upright)
         v4: Newly created vertex when splitting edge.
     */
-    std::optional<EdgeRef> divide_face(EdgeRef e, HalfedgeRef h1, EdgeRef e2, VertexRef v4);
+    void add_face(HalfedgeRef he, HalfedgeRef h1, HalfedgeRef h2, VertexRef v4);
 
     /*
         Creates a face in place of the vertex, returning a pointer to the new face
@@ -457,6 +455,9 @@ public:
         // Retrieves the next halfedge
         HalfedgeRef &next() { return _next; }
         HalfedgeCRef next() const { return _next; }
+
+        // Convenience function to get the previous halfedge
+        HalfedgeRef prev();
 
         // Retrieves the associated vertex
         VertexRef &vertex() { return _vertex; }
