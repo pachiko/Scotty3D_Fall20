@@ -262,21 +262,24 @@ void Halfedge_Mesh::remove_triangle(Halfedge_Mesh::HalfedgeRef h) {
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Mesh::FaceRef f) {
     if (f->is_boundary()) return std::nullopt; // cant collapse boundary face!
 
-    // VertexRef v = new_vertex();
-    // v->pos = f->center();
+    Vec3 pos = f->center();
+    int deg = f->degree();
+    int count = 0;
+    HalfedgeRef h = f->halfedge();
+    VertexRef v;
 
-    // HalfedgeRef h = f->halfedge();
-    // do {
-    //     EdgeRef e = h->edge();
-    //     if (e->on_boundary()) continue;
-    //     HalfedgeRef hh = h->twin();
+    while(count < deg - 1) { // make it a counting loop
+        EdgeRef e = h->edge();
+        HalfedgeRef n = h->next();
+        v = collapse_edge(e).value();
+        h = n;
+        count++;
+    }
 
-    //     h = h->next();
-    // }
-    // while(h-> != f->halfedge());
+    v->pos = pos; // really not the same!
+    erase(f);
 
-
-    return std::nullopt;
+    return v;
 }
 
 /*
@@ -578,10 +581,7 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::F
          
         // Edge 1
         e1->halfedge() = nh1;
-        nh1->edge() = e1;
-        nh1->vertex() = nv0;
-        nh1->face() = nf;
-        nh1->next() = nh2;
+        nh1->set_neighbors(nh2, halfedges_end(), nv0, e1, nf);
         if (!isFirst) {
             nh1->twin() = prev_halfedge;
             prev_halfedge->twin() = nh1;
@@ -593,10 +593,7 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::F
         t->twin() = nh2;
 
         // Edge 3
-        nh3->edge() = e3;
-        nh3->face() = nf;
-        nh3->vertex() = ov1;
-        nh3->next() = nh0;
+        nh3->set_neighbors(nh0, halfedges_end(), ov1, e3, nf);
         if (isLast) {
             nh3->twin() = first_halfedge;
             first_halfedge->twin() = nh3;
