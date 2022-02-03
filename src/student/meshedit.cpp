@@ -498,9 +498,46 @@ Halfedge_Mesh::HalfedgeRef h1, Halfedge_Mesh::HalfedgeRef h2, Halfedge_Mesh::Ver
     implement!)
 */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_vertex(Halfedge_Mesh::VertexRef v) {
+    FaceRef f = new_face();
+    HalfedgeRef h = v->halfedge(); // iterator for vertex v's halfedges
+    VertexRef firstV = v; // first vertex v
+    HalfedgeRef firstH = h; // first halfedge of vertex v
+    HalfedgeRef prevNH = halfedges_end(); // first new halfedge on new face
+    HalfedgeRef firstNH = halfedges_end(); // prev new halfedge on new face
 
-    (void)v;
-    return std::nullopt;
+    do {
+        HalfedgeRef prev = h->prev();
+
+        HalfedgeRef nh0 = new_halfedge(); // new face
+        if (firstNH == halfedges_end()) { 
+            firstNH = nh0; // first new halfedge, to be connected to at the end of the loop
+        }
+        HalfedgeRef nh1 = new_halfedge(); // existing face
+        EdgeRef e = new_edge();
+        VertexRef nv = (prev->twin() != firstH)? new_vertex() : firstV; // next vertex, rounds back to firstV
+        nv->pos = v->pos;
+        // nv->pos = prev->edge()->center(); // Init so they arent the same; else divide 0 when unit()
+
+        nh0->set_neighbors(halfedges_end(), nh1, v, e, f);
+        nh1->set_neighbors(h, nh0, nv, e, h->face());
+
+        prev->next() = nh1; // connect nh1
+        nv->halfedge() = nh1;
+        e->halfedge() = nh0;
+        if (prevNH != halfedges_end()) {
+            prevNH->next() = nh0; // connect previous nh0
+        }
+        h->vertex() = v; // Set the existing halfedges of firstV to prev nv (important for 2nd iteration onwards)
+
+        prevNH = nh0; // previous nh0
+        v = nv; // previous new vertex
+        h = prev->twin(); // next face
+    } while(h != firstH);
+
+    prevNH->next() = firstNH; // connect previous nh0 to first nh0
+    f->halfedge() = firstNH;
+
+    return f;
 }
 
 /*
@@ -527,7 +564,7 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_edge(Halfedge_Mesh::E
     implement!)
 */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_face(Halfedge_Mesh::FaceRef f) {
-    if (f->is_boundary()) {
+    if (f->is_boundary()) { // Can't bevel a boundary face!
         (void) f;
         return std::nullopt;
     }
@@ -637,10 +674,15 @@ void Halfedge_Mesh::bevel_vertex_positions(const std::vector<Vec3> &start_positi
         h = h->next();
     } while (h != face->halfedge());
 
-    (void)new_halfedges;
-    (void)start_positions;
-    (void)face;
-    (void)tangent_offset;
+    int N = (int)new_halfedges.size();
+    tangent_offset = std::clamp(tangent_offset, 0.f, 1.f);
+    Vec3 a = start_positions[0];
+    for(int i = 0; i < N; i++) {
+        // 1D linear interpolation
+        HalfedgeRef eh = new_halfedges[i]->twin()->next();
+        Vec3 b = eh->twin()->vertex()->pos;
+        new_halfedges[i]->vertex()->pos = (1.f - tangent_offset)*a + tangent_offset*b;
+    }
 }
 
 /*
@@ -672,7 +714,7 @@ void Halfedge_Mesh::bevel_edge_positions(const std::vector<Vec3> &start_position
         new_halfedges.push_back(h);
         h = h->next();
     } while (h != face->halfedge());
-
+    
     (void)new_halfedges;
     (void)start_positions;
     (void)face;
@@ -715,28 +757,22 @@ void Halfedge_Mesh::bevel_face_positions(const std::vector<Vec3> &start_position
     int N = (int)new_halfedges.size();
     Vec3 n = face->normal();
 
-    for(int i = 0; i < N; i++) {
-        // Assuming we're looking at vertex i, compute the indices
-        // of the next and previous elements in the list using
-        // modular arithmetic---note that to get the previous index,
-        // we can't just subtract 1 because the mod operation in C++
-        // doesn't behave quite how you might expect for negative
-        // values!
-        int a = (i+N-1) % N;
-        int b = i;
-        int c = (i+1) % N;
+    Vec3 centroid;
+    for (auto p: start_positions) {
+        centroid += p;
+    }
+    centroid /= static_cast<float>(start_positions.size());
 
-        // Get the actual 3D vertex coordinates at these vertices
-        Vec3 pa = start_positions[a];
-        Vec3 pb = start_positions[b];
-        Vec3 pc = start_positions[c];
-        
-        // mid-point as inset/offset point
-        Vec3 m = (pc + pa)/2.f;
-        Vec3 t = (pb - m).unit();
+    // self cross-product is 0, which makes the normal NaN.
+    // Make sure the points are never too close (i.e tangent_offset = 1)!
+    tangent_offset = std::clamp(tangent_offset, -0.2f, 0.8f);
+
+    for(int i = 0; i < N; i++) {
+        Vec3 p = start_positions[i];
+        Vec3 t = (1.f - tangent_offset)*p + (tangent_offset)*centroid;
        
         // Shrink or Expand. Elevate or Depress
-        new_halfedges[i]->vertex()->pos = pb + t*tangent_offset - n*normal_offset;
+        new_halfedges[i]->vertex()->pos = t - n*normal_offset;
     }
 }
 
