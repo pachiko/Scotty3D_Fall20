@@ -549,9 +549,63 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_vertex(Halfedge_Mesh:
     implement!)
 */
 std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::bevel_edge(Halfedge_Mesh::EdgeRef e) {
+    FaceRef f = new_face();
+    HalfedgeRef h = e->halfedge();
+    HalfedgeRef t = h->twin();
 
-    (void)e;
-    return std::nullopt;
+    HalfedgeRef hh = h; // Iterates the halfedges on the edge's vertices
+    HalfedgeRef prevNH = halfedges_end(); // previous nh0
+    HalfedgeRef firstNH = halfedges_end(); // first nh0
+
+    // NOTE: nh0's are pointing opposite to the iteration direction.
+    // We iterate along edge's and vertice's halfedges (some will be nh0's twins)
+    do {
+        HalfedgeRef nh0 = new_halfedge(); // new halfedge within new face
+        if (firstNH == halfedges_end()) firstNH = nh0;
+        bool edgeFace = hh->face() == h->face() || hh->face() == t->face(); // is the edge adjacent to this face
+
+        if (edgeFace) {
+            hh = (hh->face() == h->face())? h : t; // get the correct halfedge, important for t
+            EdgeRef ne = hh->edge();
+            if (prevNH != halfedges_end()) { // now at hh = t
+                prevNH->vertex() = t->vertex(); // connect previous nh0 and vertex
+                t->vertex()->halfedge() = prevNH;
+                ne = new_edge(); // new edge for t
+                ne->halfedge() = hh; // connect halfedge and edge
+                hh->edge() = ne;
+            }
+            nh0->set_neighbors(prevNH, hh, vertices_end(), ne, f);
+            hh->twin() = nh0;
+
+            hh = hh->next()->twin()->next(); // Iterate
+        } else {
+            HalfedgeRef nh1 = new_halfedge(); // new halfedge in existing face
+            HalfedgeRef prev = hh->prev();
+            HalfedgeRef prevTwin = prev->twin(); // to set the vertex of this halfedge
+
+            EdgeRef ne = new_edge(); // new edge
+            ne->halfedge() = nh0;
+            VertexRef v = new_vertex(); // new vertex
+            v->pos = hh->vertex()->pos; // one of the two original vertices' positions
+            v->halfedge() = nh1;
+
+            nh0->set_neighbors(prevNH, nh1, vertices_end(), ne, f); // vertex set in next iteration
+            nh1->set_neighbors(hh, nh0, v, ne, hh->face());
+            prevTwin->vertex() = v; // connect vertex and previous halfedge's twin
+            prevNH->vertex() = v; // connect vertex and previous nh0
+            prev->next() = nh1; // join halfedges
+
+            hh = hh->twin()->next(); // Iterate
+        }
+
+        prevNH = nh0; // Previous nh0
+    } while(hh != h);
+
+    prevNH->vertex() = h->vertex(); // latest nh0 originates from the first original vertex
+    h->vertex()->halfedge() = prevNH; // connect vertex and latest nh0
+    firstNH->next() = prevNH; // first nh0's next is the last nh0
+    f->halfedge() = prevNH;
+    return f;
 }
 
 /*
@@ -714,11 +768,17 @@ void Halfedge_Mesh::bevel_edge_positions(const std::vector<Vec3> &start_position
         new_halfedges.push_back(h);
         h = h->next();
     } while (h != face->halfedge());
+
+    int N = (int)new_halfedges.size();
+    tangent_offset = std::clamp(tangent_offset, 0.f, 1.f);
     
-    (void)new_halfedges;
-    (void)start_positions;
-    (void)face;
-    (void)tangent_offset;
+    for(int i = 0; i < N; i++) {
+        // 1D linear interpolation
+        Vec3 a = start_positions[i];
+        HalfedgeRef eh = new_halfedges[i]->twin()->next();
+        Vec3 b = eh->twin()->vertex()->pos;
+        new_halfedges[i]->vertex()->pos = (1.f - tangent_offset)*a + tangent_offset*b;
+    }
 }
 
 /*
