@@ -51,12 +51,36 @@ void student_debug_ui() {
     // we run this function (which is every frame). For convenience, we make them
     // static, which gives them the same storage class as global variables.
 
-    static int int_value = 0;
-    InputInt("Int Input", &int_value);
+    // static int int_value = 0;
+    // InputInt("Int Input", &int_value);
 
-    static float float_value = 0.0f;
-    InputFloat("Float Input", &float_value);
+    // static float float_value = 0.0f;
+    // InputFloat("Float Input", &float_value);
 
-    static Spectrum color = Spectrum(1.0f);
-    ColorEdit3("Color Input", color.data);
+    // static Spectrum color = Spectrum(1.0f);
+    // ColorEdit3("Color Input", color.data);
+
+    static float x = 0.f;
+    static float y = 0.f;
+    static float z = 0.f;
+    InputFloat("X", &x);
+    InputFloat("Y", &y);
+    InputFloat("Z", &z);
+    if (Button("Set Zoom To")) {
+        debug_data.x = x;
+        debug_data.y = y;
+        debug_data.z = z;
+    }
+    static float nx = 0.f;
+    static float ny = 1.f;
+    static float nz = 0.f;
+    InputFloat("Normal X", &nx);
+    InputFloat("Normal Y", &ny);
+    InputFloat("Normal Z", &nz);
+    if (Button("Set Normal To")) {
+        debug_data.nx = nx;
+        debug_data.ny = ny;
+        debug_data.nz = nz;
+    }
+    Checkbox("Debug Pos", &debug_data.debug_pos);
 }

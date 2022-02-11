@@ -178,12 +178,27 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
     HalfedgeRef h0 = e0->halfedge();
     if (h0->is_boundary()) h0 = h0->twin();
     HalfedgeRef h1 = h0->twin();
-    VertexRef v0 = h0->vertex();
-    v0->pos = (v0->pos + h1->vertex()->pos)/2;
 
     // get face degree first. This changes on the fly!
     unsigned int f0d = h0->face()->degree();
     unsigned int f1d = h1->face()->degree();
+
+    // Prevent collapsing the outer-edge of a barycentric triangle
+    // (ie a larger triangle split by a vertex within its face, forming 3 smaller triangles 
+    // whereby adjacent triangles will share 2 outer vertices and that inner vertex)
+    // which makes the mesh non-manifold (fins)
+    static auto is_barycentricTriangle_outerEdge = [](HalfedgeRef h) -> bool {
+        HalfedgeRef hh = h->next()->twin()->next()->next()->twin()->next()->next()->twin()->next();
+        if (hh == h) {
+            return true;
+        }
+        return false;
+    };
+    if (f0d == 3) if (is_barycentricTriangle_outerEdge(h0)) return std::nullopt;
+    if (f1d == 3) if (is_barycentricTriangle_outerEdge(h1)) return std::nullopt;
+
+    VertexRef v0 = h0->vertex();
+    v0->pos = (v0->pos + h1->vertex()->pos)/2.f;
 
     // Keep v0 and remove v1. All halfedges pointing to v1 are changed to point to v0
     HalfedgeRef h = h0->next();
@@ -206,7 +221,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Me
         remove_triangle(h0);
     if (f1d == 3) 
         remove_triangle(h1);
-    
+
     return v0;
 }
 
@@ -231,7 +246,7 @@ std::optional<Halfedge_Mesh::VertexRef> v) {
         // the remaining edge and vertices should point to a valid halfedge
         h1->vertex()->halfedge() = h1;
         h1->edge()->halfedge() = h1;
-        if (v != std::nullopt)
+        if (v.has_value())
             v.value()->halfedge() = h2; // only done once
     } else {
         // for non-triangles, join the broken halfedge chain.
@@ -240,7 +255,7 @@ std::optional<Halfedge_Mesh::VertexRef> v) {
         hh->next() = h->next();
         // face needs to point to a valid halfedge too.
         hh->face()->halfedge() = hh;
-        if (v != std::nullopt)
+        if (v.has_value())
             v.value()->halfedge() = h->next(); // only done once
     }
 }
@@ -292,10 +307,22 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
         return std::nullopt;
     }
     
+    // Can't flip the inner edge of a barycentric triangle. makes mesh non-manifold
+    static auto is_barycentricTriangle_innerEdge = [](HalfedgeRef h) -> bool {
+        if (h->next()->twin()->next()->twin()->next()->twin() == h) {
+            return true;
+        }
+        return false;
+    };
+    
     // Get halfedges of edge
     HalfedgeRef h0 = e0->halfedge();
     HalfedgeRef h3 = h0->twin();
-    
+
+    if (is_barycentricTriangle_innerEdge(h0) || is_barycentricTriangle_innerEdge(h3)) {
+        return std::nullopt;
+    }
+
     // Keep track of old first edges' fields
     VertexRef v1 = h0->next()->vertex(); // h1->vertex() = v1
     EdgeRef e4 = h0->next()->edge(); // h1->edge() = e4
@@ -384,7 +411,7 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh:
     e0->halfedge() = h3;
 
     VertexRef v4 = new_vertex();
-    v4->pos = (h0->vertex()->pos + h3->vertex()->pos)/2;
+    v4->pos = (h0->vertex()->pos + h3->vertex()->pos)/2.f;
 
     // Save the second halfedges
     HalfedgeRef h1 = h0->next();
@@ -1189,7 +1216,76 @@ bool Halfedge_Mesh::isotropic_remesh() {
     // but here simply calling collapse_edge() will not erase the elements.
     // You should use collapse_edge_erase() instead for the desired behavior.
 
-    return false;
+    if (boundaries.size()) // Don't support boundaries, yet?
+        return false;
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+        if (f->degree() != 3) // Triangle mesh only!
+            return false;
+    }
+
+    for (int i = 0; i < 5; i++) {
+        // Step 1: Compute mean edge length
+        float meanEdgeLength = 0.f;
+        for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+            meanEdgeLength += e->length();
+        }
+        meanEdgeLength /= static_cast<float>(edges.size());
+        
+        // Step 2: Split long edges (> 4/3*mean)
+        float maxLength = (4.f/3.f)*meanEdgeLength;
+        for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+            if (e->length() > maxLength) {
+                split_edge(e);
+            }
+        }
+
+        // Step 3: Collapse short edges (< 4/5*mean)
+        float minLength = (4.f/5.f)*meanEdgeLength;
+        bool incrementE = true;
+        for (EdgeRef e = edges_begin(); e != edges_end(); incrementE? e++ : e) {
+            if (e->length() < minLength) {
+                std::optional<Halfedge_Mesh::VertexRef> v = collapse_edge_erase(e);
+                if (v.has_value()) {
+                    e = v.value()->halfedge()->edge();
+                    incrementE = false;
+                    continue;
+                }               
+            }
+            incrementE = true;
+        }
+
+        // Step 4: Flip edges
+        for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+            int a1 = e->halfedge()->vertex()->degree();
+            int a2 = e->halfedge()->twin()->vertex()->degree();
+            int b1 = e->halfedge()->twin()->next()->next()->vertex()->degree();
+            int b2 = e->halfedge()->next()->next()->vertex()->degree();
+
+            int initialDeviation = std::abs(a1 - 6) + std::abs(a2 - 6) 
+                + std::abs(b1 - 6) + std::abs(b2 - 6);
+            int postFlipDeviation = std::abs(a1 - 7) + std::abs(a2 - 7) 
+                + std::abs(b1 - 5) + std::abs(b2 - 5);
+            if (postFlipDeviation < initialDeviation) {
+                flip_edge(e);
+            }
+        }
+
+        for (int j = 0; j < 10; j++) { // Tangential smoothing
+            for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+                Vec3 centroid = v->neighborhood_center();
+                Vec3 pos = v->pos;
+                Vec3 d = centroid - pos; // update direction
+                Vec3 n = v->normal(); // Doesn't look area-weighted?
+                d -= n*dot(d, n); // sans normal component
+                v->new_pos = pos + 0.2f*d; // Don't snap directly to centroid
+            }
+            for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+                v->pos = v->new_pos; // Actual update
+            }
+        }
+    }
+
+    return true;
 }
 
 /* Helper type for quadric simplification */

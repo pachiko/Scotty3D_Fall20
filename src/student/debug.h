@@ -45,6 +45,10 @@
 struct Debug_Data {
     // Setting it here makes it default to false.
     bool normal_colors = false;
+
+    bool debug_pos = false;
+    float x = 0.f; float y = 0.f; float z = 0.f;
+    float nx = 0.f; float ny = 1.f; float nz = 0.f;
 };
 
 // This tells other code about a global variable of type Debug_Data, allowing

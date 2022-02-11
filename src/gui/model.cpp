@@ -556,10 +556,16 @@ std::string Model::update_mesh_global(Undo &undo, Scene_Object &obj, Halfedge_Me
 }
 
 void Model::zoom_to(Halfedge_Mesh::ElementRef ref, Camera &cam) {
-
     float d = cam.dist();
-    Vec3 center = Halfedge_Mesh::center_of(ref);
-    Vec3 pos = center + my_mesh->normal_of(ref) * d;
+    Vec3 center, pos;
+    if (debug_data.debug_pos) {
+        center = Vec3(debug_data.x, debug_data.y, debug_data.z);
+        Vec3 normal(debug_data.nx, debug_data.ny, debug_data.nz);
+        pos = center + normal * d;
+    } else {
+        center = Halfedge_Mesh::center_of(ref);
+        pos = center + my_mesh->normal_of(ref) * d;
+    }
     cam.look_at(center, pos);
 }
 
