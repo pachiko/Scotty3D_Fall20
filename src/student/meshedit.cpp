@@ -1270,17 +1270,19 @@ bool Halfedge_Mesh::isotropic_remesh() {
             }
         }
 
-        for (int j = 0; j < 10; j++) { // Tangential smoothing
+        // Step 5: Tangential Smoothing
+        std::unordered_map<VertexRef, Vec3> centroids;
+        for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+            centroids.insert(make_pair(v, v->neighborhood_center()));
+        }
+        for (int j = 0; j < 10; j++) {
             for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
-                Vec3 centroid = v->neighborhood_center();
+                Vec3 centroid = centroids.at(v);
                 Vec3 pos = v->pos;
                 Vec3 d = centroid - pos; // update direction
-                Vec3 n = v->normal(); // Doesn't look area-weighted?
+                Vec3 n = v->normal();
                 d -= n*dot(d, n); // sans normal component
-                v->new_pos = pos + 0.2f*d; // Don't snap directly to centroid
-            }
-            for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
-                v->pos = v->new_pos; // Actual update
+                v->pos = pos + 0.2f*d;
             }
         }
     }
