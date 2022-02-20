@@ -1304,10 +1304,31 @@ struct Edge_Record {
         //    Edge_Record::optimal.
         // -> Also store the cost associated with collapsing this edge in
         //    Edge_Record::cost.
+        Mat4 edgeQuad = vertex_quadrics[e->halfedge()->vertex()] +
+            vertex_quadrics[e->halfedge()->twin()->vertex()]; // K, quadric of edge
+
+        // Don't even need to do all these. Just solve [A | t, [0,0,0,1]]*x = [0,0,0,1]
+        Mat4 A(edgeQuad); // Upper-left 3x3 (Scotty3D does not have Mat3)
+        Vec3 b = edgeQuad[3].xyz(); // Translation column vector
+
+        A[3] = Vec4(0.f, 0.f, 0.f, 1.f); // set the translation to 0, remember to extract it earlier!
+        A[0][3] = 0.f; // 4th row (x, y, z). Very Important! (see Garland, Heckbert 97)
+        A[1][3] = 0.f;
+        A[2][3] = 0.f;
+
+        if (std::abs(A.det()) < 0.000001f) { // Not invertible
+            optimal = e->center();
+        } else {
+            optimal = -(A.inverse()*b); // Solve!
+        }
+
+        Vec4 opt(optimal, 1.f);
+        cost = dot(opt, edgeQuad*opt); // xT.K.x
     }
+
     Halfedge_Mesh::EdgeRef edge;
     Vec3 optimal;
-    float cost;
+    float cost; // Quadric error
 };
 
 /* Comparison operator for Edge_Records so std::set will properly order them */
@@ -1416,6 +1437,107 @@ bool Halfedge_Mesh::simplify() {
     //    a quadric to the collapsed vertex, and to pop the collapsed edge off the
     //    top of the queue.
 
+    if (boundaries.size()) // Don't support boundaries, yet?
+        return false;
+
+    size_t target = faces.size()/4; // Subdivision increases by 4, so simplification is 1/4
+    
+    // Step 1: Face quadrics
+    for (FaceRef f = faces_begin(); f != faces_end(); f++) {
+        if (f->degree() != 3) // Triangle mesh only!
+            return false;
+        Vec3 n = f->normal();
+        float d = -dot(n, f->halfedge()->vertex()->pos);
+        Vec4 v(n, d);
+        Mat4 q = outer(v, v);
+        face_quadrics[f] = q;
+    }
+
+    // Step 2: Vertex quadrics (sum incident face quadrics)
+    for (VertexRef v = vertices_begin(); v != vertices_end(); v++) {
+        Mat4 q(Mat4::Zero); // Default = Identity!!! Everyone does this...
+        Halfedge_Mesh::HalfedgeRef h = v->halfedge();
+        do {
+            q += face_quadrics[h->face()];
+            h = h->twin()->next();
+        } while(h != v->halfedge());
+        vertex_quadrics[v] = q;
+    }
+    face_quadrics.clear(); // No longer needed!
+
+    // Step 3: Construct edge records
+    for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
+        Edge_Record er(vertex_quadrics, e);
+        edge_records[e] = er;
+        edge_queue.insert(er);
+    }
+
+    // Step 4: Collapse cheapest edges
+    int count = 0;
+    while (faces.size() > target && edge_queue.size() > 12) {
+        count++;
+        // Cheapest edge. Also remove from queue
+        Edge_Record er = edge_queue.top();
+        edge_queue.pop();
+        EdgeRef cheap = er.edge;
+
+        // Compute quadric of edge (not stored anywhere earlier)
+        Mat4 edgeQuad = vertex_quadrics[cheap->halfedge()->vertex()] +
+            vertex_quadrics[cheap->halfedge()->twin()->vertex()];
+
+        // Might need to put them back later
+        std::unordered_map<EdgeRef, Edge_Record> removed_edge_records;
+
+        // Functor to remove incident edges from ALL CONTAINERS
+        static auto removeFromEdgesQueue = [&](HalfedgeRef h) {
+            HalfedgeRef init = h;
+            do {            
+                edge_queue.remove(edge_records[h->edge()]);
+                if (h != init) {
+                    removed_edge_records[h->edge()] = edge_records[h->edge()];
+                }
+                edge_records.erase(h->edge());
+                h = h->twin()->next();
+            } while(h != init);
+        };
+
+        // Remove incident edges of the cheapest edge from ALL CONTAINERS
+        HalfedgeRef h = cheap->halfedge();
+        removeFromEdgesQueue(h);
+        h = cheap->halfedge()->twin();
+        removeFromEdgesQueue(h);
+
+        // Also remove vertex quadrics
+        Mat4 vertQ1 = vertex_quadrics[cheap->halfedge()->vertex()];
+        Mat4 vertQ2 = vertex_quadrics[cheap->halfedge()->twin()->vertex()];
+        vertex_quadrics.erase(cheap->halfedge()->vertex());
+        vertex_quadrics.erase(cheap->halfedge()->twin()->vertex());
+
+        // Collapse cheapest edge. Survivor vertex takes on its quadric
+        std::optional<Halfedge_Mesh::VertexRef> v = collapse_edge_erase(cheap);
+        if (v.has_value()) {
+            v.value()->pos = er.optimal;
+            vertex_quadrics[v.value()] = edgeQuad;
+
+            // Re-compute quadrics for incident edges. Also create new records
+            h = v.value()->halfedge();
+
+            do {
+                Edge_Record rec(vertex_quadrics, h->edge());
+                edge_records[h->edge()] = rec;
+                edge_queue.insert(rec);
+                h = h->twin()->next();
+            } while(h != v.value()->halfedge());
+        } else {
+            for (auto removed : removed_edge_records) { // PUT THEM BACK!
+                edge_records[removed.first] = removed.second;
+                edge_queue.insert(removed.second);
+            }
+            vertex_quadrics[cheap->halfedge()->vertex()] = vertQ1;
+            vertex_quadrics[cheap->halfedge()->twin()->vertex()] = vertQ2;
+        }
+    }
+
     // Note: if you erase elements in a local operation, they will not be actually deleted
     // until do_erase or validate are called. This is to facilitate checking
     // for dangling references to elements that will be erased.
@@ -1423,5 +1545,5 @@ bool Halfedge_Mesh::simplify() {
     // but here simply calling collapse_edge() will not erase the elements.
     // You should use collapse_edge_erase() instead for the desired behavior.
 
-    return false;
+    return true;
 }
