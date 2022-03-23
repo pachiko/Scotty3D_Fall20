@@ -1450,7 +1450,7 @@ bool Halfedge_Mesh::simplify() {
         float d = -dot(n, f->halfedge()->vertex()->pos);
         Vec4 v(n, d);
         Mat4 q = outer(v, v);
-        face_quadrics[f] = q;
+        face_quadrics.insert({f, q});
     }
 
     // Step 2: Vertex quadrics (sum incident face quadrics)
@@ -1458,17 +1458,17 @@ bool Halfedge_Mesh::simplify() {
         Mat4 q(Mat4::Zero); // Default = Identity!!! Everyone does this...
         Halfedge_Mesh::HalfedgeRef h = v->halfedge();
         do {
-            q += face_quadrics[h->face()];
+            q += face_quadrics.at(h->face());
             h = h->twin()->next();
         } while(h != v->halfedge());
-        vertex_quadrics[v] = q;
+        vertex_quadrics.insert({v, q});
     }
     face_quadrics.clear(); // No longer needed!
 
     // Step 3: Construct edge records
     for (EdgeRef e = edges_begin(); e != edges_end(); e++) {
         Edge_Record er(vertex_quadrics, e);
-        edge_records[e] = er;
+        edge_records.insert({e, er});
         edge_queue.insert(er);
     }
 
@@ -1482,8 +1482,8 @@ bool Halfedge_Mesh::simplify() {
         EdgeRef cheap = er.edge;
 
         // Compute quadric of edge (not stored anywhere earlier)
-        Mat4 edgeQuad = vertex_quadrics[cheap->halfedge()->vertex()] +
-            vertex_quadrics[cheap->halfedge()->twin()->vertex()];
+        Mat4 edgeQuad = vertex_quadrics.at(cheap->halfedge()->vertex()) +
+            vertex_quadrics.at(cheap->halfedge()->twin()->vertex());
 
         // Might need to put them back later
         std::unordered_map<EdgeRef, Edge_Record> removed_edge_records;
@@ -1494,7 +1494,7 @@ bool Halfedge_Mesh::simplify() {
             do {            
                 edge_queue.remove(edge_records[h->edge()]);
                 if (h != init) {
-                    removed_edge_records[h->edge()] = edge_records[h->edge()];
+                    removed_edge_records.insert({h->edge(), edge_records.at(h->edge())});
                 }
                 edge_records.erase(h->edge());
                 h = h->twin()->next();
@@ -1508,8 +1508,8 @@ bool Halfedge_Mesh::simplify() {
         removeFromEdgesQueue(h);
 
         // Also remove vertex quadrics
-        Mat4 vertQ1 = vertex_quadrics[cheap->halfedge()->vertex()];
-        Mat4 vertQ2 = vertex_quadrics[cheap->halfedge()->twin()->vertex()];
+        Mat4 vertQ1 = vertex_quadrics.at(cheap->halfedge()->vertex());
+        Mat4 vertQ2 = vertex_quadrics.at(cheap->halfedge()->twin()->vertex());
         vertex_quadrics.erase(cheap->halfedge()->vertex());
         vertex_quadrics.erase(cheap->halfedge()->twin()->vertex());
 
@@ -1517,24 +1517,24 @@ bool Halfedge_Mesh::simplify() {
         std::optional<Halfedge_Mesh::VertexRef> v = collapse_edge_erase(cheap);
         if (v.has_value()) {
             v.value()->pos = er.optimal;
-            vertex_quadrics[v.value()] = edgeQuad;
+            vertex_quadrics.insert({v.value(), edgeQuad});
 
             // Re-compute quadrics for incident edges. Also create new records
             h = v.value()->halfedge();
 
             do {
                 Edge_Record rec(vertex_quadrics, h->edge());
-                edge_records[h->edge()] = rec;
+                edge_records.insert({h->edge(), rec});
                 edge_queue.insert(rec);
                 h = h->twin()->next();
             } while(h != v.value()->halfedge());
         } else {
             for (auto removed : removed_edge_records) { // PUT THEM BACK!
-                edge_records[removed.first] = removed.second;
+                edge_records.insert({removed.first, removed.second});
                 edge_queue.insert(removed.second);
             }
-            vertex_quadrics[cheap->halfedge()->vertex()] = vertQ1;
-            vertex_quadrics[cheap->halfedge()->twin()->vertex()] = vertQ2;
+            vertex_quadrics.insert({cheap->halfedge()->vertex(), vertQ1});
+            vertex_quadrics.insert({cheap->halfedge()->twin()->vertex(), vertQ2});
         }
     }
 
