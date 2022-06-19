@@ -101,6 +101,7 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
     // (3) Compute attenuation based on reflectance or transmittance
 
     // Be wary of your eta1/eta2 ratio - are you entering or leaving the surface?
+     // w_i = incident light; w_o = outgoing view
 
     bool was_internal;
     Vec3 refracted = refract(out_dir, index_of_refraction, was_internal); // could be TIR, could be refraction
@@ -120,13 +121,13 @@ BSDF_Sample BSDF_Glass::sample(Vec3 out_dir) const {
     // Scatter = Reflect + Transmit/Refract
     if (RNG::coin_flip(fresnel)) { // reflect or TIR
         ret.direction = reflect(out_dir);
-        ret.attenuation = fresnel/std::abs(out_dir.y)*reflectance; // see Section 8.2.2 Specular Reflection
+        ret.attenuation = fresnel/std::abs(ret.direction.y)*reflectance; // see Section 8.2.2 Specular Reflection
         ret.pdf = fresnel;
     } else { // refract
         ret.direction = refracted;
-        float eta_t_over_i = (out_dir.y >= 0) ? index_of_refraction : 1.f/index_of_refraction;
+        float eta_i_over_t = (out_dir.y >= 0) ? 1.f/index_of_refraction : index_of_refraction;
         // see Section 8.2.3 Specular Transmission
-        ret.attenuation = eta_t_over_i*eta_t_over_i*(1.f - fresnel)/std::abs(out_dir.y)*transmittance;
+        ret.attenuation = eta_i_over_t*eta_i_over_t*(1.f - fresnel)/std::abs(ret.direction.y)*transmittance;
         ret.pdf = 1.f - fresnel;
     }
     
